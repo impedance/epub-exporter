@@ -35,19 +35,21 @@ async function createEPUBFile(data) {
 
 async function loadJSZip() {
     try {
-        // AICODE-TRAP: import() unsupported in service workers, use importScripts instead [2025-08-10]
+        // AICODE-TRAP: importScripts throws DOMException in MV3 service workers; prefer dynamic import with chrome.runtime.getURL [2025-08-10]
         // AICODE-WHY: Load JSZip locally to avoid network dependency during EPUB generation [2025-08-10]
-        importScripts('jszip.min.js');
+        const jszipUrl = chrome.runtime.getURL('jszip.min.js');
+        await import(jszipUrl);
 
+        const JSZip = self.JSZip;
         if (typeof JSZip === 'undefined') {
             throw new Error('JSZip не загружен из локального файла');
         }
-        
+
         // Проверяем целостность загруженной библиотеки
-        if (!validateJSZipIntegrity()) {
+        if (!validateJSZipIntegrity(JSZip)) {
             throw new Error('Нарушена целостность библиотеки JSZip');
         }
-        
+
         return JSZip;
     } catch (error) {
         console.error('Ошибка загрузки JSZip:', error);
@@ -55,9 +57,9 @@ async function loadJSZip() {
     }
 }
 
-function validateJSZipIntegrity() {
+function validateJSZipIntegrity(JSZip) {
     // Проверяем основные методы JSZip для валидации целостности
-    return typeof JSZip === 'function' && 
+    return typeof JSZip === 'function' &&
            typeof JSZip.prototype.file === 'function' &&
            typeof JSZip.prototype.folder === 'function' &&
            typeof JSZip.prototype.generateAsync === 'function';
