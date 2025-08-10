@@ -1,8 +1,10 @@
+// @ts-check
+/* global chrome, extractContentFromTab */
 document.addEventListener('DOMContentLoaded', function() {
-    const exportBtn = document.getElementById('exportBtn');
-    const progress = document.getElementById('progress');
-    const progressBar = document.getElementById('progressBar');
-    const status = document.getElementById('status');
+    const exportBtn = /** @type {HTMLButtonElement} */ (document.getElementById('exportBtn'));
+    const progress = /** @type {HTMLDivElement} */ (document.getElementById('progress'));
+    const progressBar = /** @type {HTMLDivElement} */ (document.getElementById('progressBar'));
+    const status = /** @type {HTMLDivElement} */ (document.getElementById('status'));
 
     exportBtn.addEventListener('click', async function() {
         try {
@@ -10,7 +12,11 @@ document.addEventListener('DOMContentLoaded', function() {
             setProgress(10);
             
             // Получаем активную вкладку
-            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+            const tab = tabs[0];
+            if (!tab?.id) {
+                throw new Error('Не удалось получить текущую вкладку');
+            }
             
             setStatus('Извлечение контента...', 'loading');
             setProgress(30);
@@ -54,8 +60,9 @@ document.addEventListener('DOMContentLoaded', function() {
             }, 2000);
             
         } catch (error) {
-            console.error('Ошибка экспорта:', error);
-            setStatus(`❌ ${error.message}`, 'error');
+            const err = /** @type {Error} */ (error);
+            console.error('Ошибка экспорта:', err);
+            setStatus(`❌ ${err.message}`, 'error');
             setProgress(0);
         }
     });
@@ -82,6 +89,11 @@ document.addEventListener('DOMContentLoaded', function() {
     // Проверяем, можно ли экспортировать контент с текущей страницы
     chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
         const currentTab = tabs[0];
+        if (!currentTab || !currentTab.url) {
+            setStatus('⚠️ Экспорт недоступен', 'error');
+            exportBtn.disabled = true;
+            return;
+        }
         if (currentTab.url.startsWith('chrome://') || currentTab.url.startsWith('chrome-extension://')) {
             setStatus('⚠️ Экспорт недоступен для системных страниц', 'error');
             exportBtn.disabled = true;

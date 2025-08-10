@@ -1,5 +1,25 @@
+// @ts-check
+/* global JSZip, chrome */
 // Background script для обработки создания EPUB файлов
 import EPUBGenerator from './epub_generator.js';
+
+/**
+ * @typedef {Object} ExtractedImage
+ * @property {string} src
+ * @property {string} base64
+ * @property {string} alt
+ * @property {number|string} width
+ * @property {number|string} height
+ */
+
+/**
+ * @typedef {Object} ExtractedContent
+ * @property {string} title
+ * @property {string} content
+ * @property {ExtractedImage[]} images
+ * @property {string} url
+ * @property {string} timestamp
+ */
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'createEPUB') {
@@ -10,6 +30,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 });
 
+/**
+ * Создает EPUB файл из переданных данных.
+ * @param {ExtractedContent} data
+ * @returns {Promise<{downloadUrl: string, filename: string}>}
+ */
 async function createEPUBFile(data) {
     try {
         const generator = new EPUBGenerator();
@@ -17,12 +42,17 @@ async function createEPUBFile(data) {
         const result = await generator.createEPUB(title, content, images, url);
         return { downloadUrl: result.downloadUrl, filename: result.filename };
     } catch (error) {
-        console.error('Ошибка создания EPUB:', error);
-        throw error;
+        const err = /** @type {Error} */ (error);
+        console.error('Ошибка создания EPUB:', err);
+        throw err;
     }
 }
 
 // AICODE-LINK: ./epub_generator.js#loadJSZip
+/**
+ * Загружает JSZip из локального файла расширения.
+ * @returns {Promise<typeof JSZip>}
+ */
 async function loadJSZip() {
     try {
         // AICODE-TRAP: import() disallowed in ServiceWorkerGlobalScope; load via fetch + Function [2025-08-11]
@@ -43,11 +73,17 @@ async function loadJSZip() {
 
         return JSZip;
     } catch (error) {
-        console.error('Ошибка загрузки JSZip:', error);
+        const err = /** @type {Error} */ (error);
+        console.error('Ошибка загрузки JSZip:', err);
         throw new Error('Не удалось загрузить библиотеку JSZip из локального файла');
     }
 }
 
+/**
+ * Проверяет целостность экземпляра JSZip.
+ * @param {typeof JSZip} JSZip
+ * @returns {boolean}
+ */
 function validateJSZipIntegrity(JSZip) {
     // Проверяем основные методы JSZip для валидации целостности
     return typeof JSZip === 'function' &&
@@ -56,6 +92,12 @@ function validateJSZipIntegrity(JSZip) {
            typeof JSZip.prototype.generateAsync === 'function';
 }
 
+/**
+ * Генерирует EPUB в формате Blob.
+ * @param {typeof JSZip} JSZip
+ * @param {ExtractedContent} data
+ * @returns {Promise<Blob>}
+ */
 async function generateEPUB(JSZip, data) {
     const zip = new JSZip();
     

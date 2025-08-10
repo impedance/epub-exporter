@@ -4,7 +4,8 @@
   "description": "Полнофункциональное Chrome расширение для извлечения контента из веб-страниц и конвертации в формат EPUB, оптимизированный для PocketBook и других электронных читалок.",
   "main": "background.js",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",

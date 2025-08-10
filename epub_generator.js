@@ -1,6 +1,33 @@
+// @ts-check
+/* global JSZip */
 // EPUB Generator - Утилиты для создания EPUB файлов
 // Этот модуль предоставляет дополнительные функции
+/* AICODE-WHY: Typed EPUB generation ensures predictable EPUB structure and catch integration issues early [2025-08-13] */
 import './jszip.min.js';
+
+/**
+ * @typedef {typeof JSZip} JSZipConstructor
+ * @typedef {InstanceType<JSZipConstructor>} JSZipInstance
+ */
+
+/**
+ * @typedef {Object} ImageInput
+ * @property {string} src
+ * @property {string} base64
+ * @property {string} [alt]
+ * @property {number|string} [width]
+ * @property {number|string} [height]
+ */
+
+/**
+ * @typedef {Object} BookData
+ * @property {string} title
+ * @property {string} content
+ * @property {ImageInput[]} images
+ * @property {string} url
+ * @property {string} uuid
+ * @property {string} timestamp
+ */
 
 class EPUBGenerator {
     constructor() {
@@ -15,6 +42,14 @@ class EPUBGenerator {
     }
 
     // Основная функция создания EPUB
+    /**
+     * Создает EPUB файл на основе переданных данных.
+     * @param {string} title
+     * @param {string} content
+     * @param {ImageInput[]} [images=[]]
+     * @param {string} [url='']
+     * @returns {Promise<{downloadUrl: string, filename: string}>}
+     */
     async createEPUB(title, content, images = [], url = '') {
         try {
             const JSZip = await this.loadJSZip();
@@ -47,13 +82,18 @@ class EPUBGenerator {
             };
 
         } catch (error) {
-            console.error('Ошибка создания EPUB:', error);
-            throw new Error(`Не удалось создать EPUB: ${error.message}`);
+            const err = /** @type {Error} */ (error);
+            console.error('Ошибка создания EPUB:', err);
+            throw new Error(`Не удалось создать EPUB: ${err.message}`);
         }
     }
 
     // Загрузка JSZip библиотеки
     // AICODE-LINK: ./background.js#createEPUBFile
+    /**
+     * Загружает и валидирует JSZip из глобальной области видимости.
+     * @returns {Promise<JSZipConstructor>}
+     */
     async loadJSZip() {
         // AICODE-TRAP: JSZip is loaded into global scope via import in Manifest V3 modules, but might not be ready instantly. [2025-08-12]
         // AICODE-WHY: The import at the top of the module handles loading. This function now just validates that it's loaded. [2025-08-12]
@@ -67,6 +107,11 @@ class EPUBGenerator {
         throw new Error('Библиотека JSZip не загружена. Проверьте импорт в модуле.');
     }
 
+    /**
+     * Проверяет наличие ключевых методов в экземпляре JSZip.
+     * @param {JSZipConstructor} JSZipInstance
+     * @returns {boolean}
+     */
     validateJSZipIntegrity(JSZipInstance) {
         // Проверяем основные методы JSZip для валидации целостности
         return typeof JSZipInstance === 'function' &&
@@ -76,6 +121,12 @@ class EPUBGenerator {
     }
 
     // Построение структуры EPUB
+    /**
+     * Формирует структуру EPUB в архиве.
+     * @param {JSZipInstance} zip
+     * @param {BookData} bookData
+     * @returns {Promise<void>}
+     */
     async buildEPUBStructure(zip, bookData) {
         // mimetype (несжатый)
         zip.file('mimetype', this.templates.mimetype, { compression: 'STORE' });
@@ -107,6 +158,12 @@ class EPUBGenerator {
     }
 
     // Добавление изображений в ZIP
+    /**
+     * Добавляет изображения в архив и формирует их манифест.
+     * @param {JSZipInstance} oebpsFolder
+     * @param {ImageInput[]} images
+     * @returns {Promise<Array<{id: string, filename: string, mediaType: string}>>}
+     */
     async addImagesToZip(oebpsFolder, images) {
         const imageFolder = oebpsFolder.folder('images');
         const imageManifest = [];
@@ -136,7 +193,8 @@ class EPUBGenerator {
                     originalSrc: image.src
                 });
             } catch (error) {
-                console.warn(`Ошибка обработки изображения ${i}:`, error);
+                const err = /** @type {Error} */ (error);
+                console.warn(`Ошибка обработки изображения ${i}:`, err);
             }
         }
 
