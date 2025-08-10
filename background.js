@@ -33,14 +33,16 @@ async function createEPUBFile(data) {
     }
 }
 
+// AICODE-LINK: ./epub_generator.js#loadJSZip
 async function loadJSZip() {
     try {
-        // AICODE-TRAP: importScripts throws DOMException in MV3 service workers; prefer dynamic import with chrome.runtime.getURL [2025-08-10]
+        // AICODE-TRAP: import() disallowed in ServiceWorkerGlobalScope; load via fetch + Function [2025-08-11]
         // AICODE-WHY: Load JSZip locally to avoid network dependency during EPUB generation [2025-08-10]
         const jszipUrl = chrome.runtime.getURL('jszip.min.js');
-        await import(jszipUrl);
+        const response = await fetch(jszipUrl);
+        const scriptText = await response.text();
+        const JSZip = new Function(`${scriptText}; return JSZip;`)();
 
-        const JSZip = self.JSZip;
         if (typeof JSZip === 'undefined') {
             throw new Error('JSZip не загружен из локального файла');
         }

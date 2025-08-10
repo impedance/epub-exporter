@@ -52,40 +52,53 @@ class EPUBGenerator {
     }
 
     // Загрузка JSZip библиотеки
+    // AICODE-LINK: ./background.js#loadJSZip
     async loadJSZip() {
         if (typeof JSZip !== 'undefined') {
             // Проверяем целостность уже загруженной библиотеки
-            if (!this.validateJSZipIntegrity()) {
+            if (!this.validateJSZipIntegrity(JSZip)) {
                 throw new Error('Нарушена целостность уже загруженной библиотеки JSZip');
             }
             return JSZip;
         }
 
         try {
-            // Загружаем JSZip из локального файла
-            await import('./jszip.min.js');
-            
-            if (typeof JSZip === 'undefined') {
+            let scriptText;
+            if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
+                // AICODE-TRAP: import() fails in service workers; evaluate fetched script instead [2025-08-11]
+                const jszipUrl = chrome.runtime.getURL('jszip.min.js');
+                const response = await fetch(jszipUrl);
+                scriptText = await response.text();
+            } else {
+                const fs = require('fs/promises');
+                const path = require('path');
+                const jszipPath = path.join(__dirname, 'jszip.min.js');
+                scriptText = await fs.readFile(jszipPath, 'utf8');
+            }
+
+            const JSZipInstance = new Function(`${scriptText}; return JSZip;`)();
+
+            if (typeof JSZipInstance === 'undefined') {
                 throw new Error('JSZip не инициализирован после загрузки из локального файла');
             }
-            
+
             // Проверяем целостность загруженной библиотеки
-            if (!this.validateJSZipIntegrity()) {
+            if (!this.validateJSZipIntegrity(JSZipInstance)) {
                 throw new Error('Нарушена целостность библиотеки JSZip после загрузки');
             }
-            
-            return JSZip;
+
+            return JSZipInstance;
         } catch (error) {
             throw new Error(`Ошибка загрузки JSZip из локального файла: ${error.message}`);
         }
     }
 
-    validateJSZipIntegrity() {
+    validateJSZipIntegrity(JSZipInstance) {
         // Проверяем основные методы JSZip для валидации целостности
-        return typeof JSZip === 'function' && 
-               typeof JSZip.prototype.file === 'function' &&
-               typeof JSZip.prototype.folder === 'function' &&
-               typeof JSZip.prototype.generateAsync === 'function';
+        return typeof JSZipInstance === 'function' &&
+               typeof JSZipInstance.prototype.file === 'function' &&
+               typeof JSZipInstance.prototype.folder === 'function' &&
+               typeof JSZipInstance.prototype.generateAsync === 'function';
     }
 
     // Построение структуры EPUB
