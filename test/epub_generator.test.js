@@ -50,3 +50,10 @@ test('escapeXML escapes special characters', () => {
   const expected = '&lt;tag attr=&quot;value&quot;&gt;&amp;&apos;';
   assert.strictEqual(gen.escapeXML(input), expected);
 });
+
+test('loadJSZip loads JSZip library from local file', async () => {
+  const gen = new EPUBGenerator();
+  const JSZip = await gen.loadJSZip();
+  assert.equal(typeof JSZip.prototype.file, 'function');
+  assert.equal(typeof JSZip.prototype.generateAsync, 'function');
+});
