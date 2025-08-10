@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EPUB Экспортер</title>
+    <style>
+        body {
+            width: 320px;
+            padding: 16px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .container {
+            text-align: center;
+        }
+        
+        h1 {
+            margin: 0 0 20px 0;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .export-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            width: 100%;
+            backdrop-filter: blur(10px);
+        }
+        
+        .export-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            border-color: rgba(255, 255, 255, 0.5);
+            transform: translateY(-2px);
+        }
+        
+        .export-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .progress {
+            margin-top: 16px;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+            overflow: hidden;
+            display: none;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background: white;
+            width: 0%;
+            transition: width 0.3s ease;
+            border-radius: 2px;
+        }
+        
+        .status {
+            margin-top: 12px;
+            font-size: 14px;
+            opacity: 0.9;
+            min-height: 20px;
+        }
+        
+        .error {
+            color: #ffcdd2;
+            background: rgba(244, 67, 54, 0.2);
+            padding: 8px;
+            border-radius: 8px;
+            margin-top: 12px;
+            font-size: 12px;
+        }
+        
+        .success {
+            color: #c8e6c9;
+            background: rgba(76, 175, 80, 0.2);
+            padding: 8px;
+            border-radius: 8px;
+            margin-top: 12px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📚 EPUB Экспортер</h1>
+        <button id="exportBtn" class="export-btn">
+            Экспорт в EPUB
+        </button>
+        <div id="progress" class="progress">
+            <div id="progressBar" class="progress-bar"></div>
+        </div>
+        <div id="status" class="status"></div>
+    </div>
+    <script src="popup.js"></script>
+</body>
+</html>

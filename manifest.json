@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "EPUB Экспортер",
+  "version": "1.0.0",
+  "description": "Экспорт контента веб-страниц в формат EPUB для PocketBook",
+  "permissions": [
+    "activeTab",
+    "downloads"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Экспорт в EPUB"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content_script.js"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["epub_generator.js", "jszip.min.js"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; default-src 'self'"
+  }
+}
