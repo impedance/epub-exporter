@@ -5,7 +5,8 @@
   "description": "Экспорт контента веб-страниц в формат EPUB для PocketBook",
   "permissions": [
     "activeTab",
-    "downloads"
+    "downloads",
+    "scripting"
   ],
   "action": {
     "default_popup": "popup.html",

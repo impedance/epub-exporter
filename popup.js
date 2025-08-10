@@ -16,7 +16,8 @@ document.addEventListener('DOMContentLoaded', function() {
             setProgress(30);
             
             // Отправляем сообщение в content script
-            const response = await chrome.tabs.sendMessage(tab.id, { action: 'extractContent' });
+            // AICODE-LINK: ./extractContent.js#extractContentFromTab
+            const response = await extractContentFromTab(tab.id);
             
             if (!response || !response.success) {
                 throw new Error(response?.error || 'Не удалось извлечь контент');
