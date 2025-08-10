@@ -1,0 +1,13 @@
+{
+  "name": "epub-exporter",
+  "version": "1.0.0",
+  "description": "Полнофункциональное Chrome расширение для извлечения контента из веб-страниц и конвертации в формат EPUB, оптимизированный для PocketBook и других электронных читалок.",
+  "main": "background.js",
+  "scripts": {
+    "test": "node --test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}
