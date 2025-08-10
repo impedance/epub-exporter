@@ -35,9 +35,10 @@ async function createEPUBFile(data) {
 
 async function loadJSZip() {
     try {
-        // Загружаем JSZip из локального файла
-        await import('./jszip.min.js');
-        
+        // AICODE-TRAP: import() unsupported in service workers, use importScripts instead [2025-08-10]
+        // AICODE-WHY: Load JSZip locally to avoid network dependency during EPUB generation [2025-08-10]
+        importScripts('jszip.min.js');
+
         if (typeof JSZip === 'undefined') {
             throw new Error('JSZip не загружен из локального файла');
         }
