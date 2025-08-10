@@ -11,7 +11,6 @@ Enable users to save web articles as EPUB files for offline reading and archivin
 ## User Experience
 1. User clicks extension icon on article page
 2. Extension analyzes and extracts main content
-3. User can preview and adjust content
 4. EPUB is generated and downloaded
 
 ## Key Features

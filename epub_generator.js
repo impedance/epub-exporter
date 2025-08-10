@@ -62,21 +62,34 @@ class EPUBGenerator {
             return JSZip;
         }
 
+        let scriptText;
+        let JSZipInstance;
+        
         try {
-            let scriptText;
             if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
-                // AICODE-TRAP: import() fails in service workers; evaluate fetched script instead [2025-08-11]
+                // В окружении расширения Chrome
                 const jszipUrl = chrome.runtime.getURL('jszip.min.js');
                 const response = await fetch(jszipUrl);
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch JSZip: ${response.status} ${response.statusText}`);
+                }
                 scriptText = await response.text();
             } else {
+                // В Node.js окружении
                 const fs = require('fs/promises');
                 const path = require('path');
                 const jszipPath = path.join(__dirname, 'jszip.min.js');
                 scriptText = await fs.readFile(jszipPath, 'utf8');
             }
 
-            const JSZipInstance = new Function(`${scriptText}; return JSZip;`)();
+            try {
+                JSZipInstance = new Function(`${scriptText}; return JSZip;`)();
+            } catch (evalError) {
+                if (evalError instanceof EvalError) {
+                    throw new EvalError(`JSZip evaluation blocked by CSP: ${evalError.message}`);
+                }
+                throw evalError;
+            }
 
             if (typeof JSZipInstance === 'undefined') {
                 throw new Error('JSZip не инициализирован после загрузки из локального файла');
@@ -89,7 +102,19 @@ class EPUBGenerator {
 
             return JSZipInstance;
         } catch (error) {
-            throw new Error(`Ошибка загрузки JSZip из локального файла: ${error.message}`);
+            // Очищаем глобальную переменную в случае ошибки
+            if (typeof JSZipInstance !== 'undefined') {
+                try {
+                    delete global.JSZip;
+                } catch (cleanupError) {
+                    console.error('Ошибка очистки JSZip:', cleanupError);
+                }
+            }
+            
+            if (error instanceof EvalError) {
+                throw error; // Пробрасываем EvalError как есть
+            }
+            throw new Error(`Ошибка загрузки JSZip: ${error.message}`);
         }
     }
 
