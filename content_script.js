@@ -1,4 +1,25 @@
+// @ts-check
+/* global chrome */
 // Content script для извлечения контента страницы
+/* AICODE-WHY: JSDoc types formalize the content contract for cross-module reuse [2025-08-13] */
+
+/**
+ * @typedef {Object} ExtractedImage
+ * @property {string} src
+ * @property {string} base64
+ * @property {string} alt
+ * @property {number|string} width
+ * @property {number|string} height
+ */
+
+/**
+ * @typedef {Object} ExtractedContent
+ * @property {string} title
+ * @property {string} content
+ * @property {ExtractedImage[]} images
+ * @property {string} url
+ * @property {string} timestamp
+ */
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'extractContent') {
         extractPageContent()
@@ -8,6 +29,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 });
 
+/**
+ * Извлекает контент страницы.
+ * @returns {Promise<ExtractedContent>}
+ */
 async function extractPageContent() {
     try {
         // Ищем основной контейнер с контентом
@@ -39,11 +64,16 @@ async function extractPageContent() {
         };
         
     } catch (error) {
-        console.error('Ошибка извлечения контента:', error);
-        throw error;
+        const err = /** @type {Error} */ (error);
+        console.error('Ошибка извлечения контента:', err);
+        throw err;
     }
 }
 
+/**
+ * Определяет заголовок страницы.
+ * @returns {string}
+ */
 function extractTitle() {
     // Пытаемся найти заголовок в разных местах
     const titleSelectors = [
@@ -66,9 +96,14 @@ function extractTitle() {
     return document.title || 'Экспортированная статья';
 }
 
+/**
+ * Извлекает текстовое содержимое из контейнера.
+ * @param {Element} container
+ * @returns {Promise<string>}
+ */
 async function extractTextContent(container) {
     // Клонируем контейнер для безопасной обработки
-    const clone = container.cloneNode(true);
+    const clone = /** @type {HTMLElement} */ (container.cloneNode(true));
     
     // Удаляем нежелательные элементы
     const unwantedSelectors = [
@@ -131,6 +166,11 @@ async function extractTextContent(container) {
     return formattedContent;
 }
 
+/**
+ * Собирает изображения из контейнера.
+ * @param {Element} container
+ * @returns {Promise<ExtractedImage[]>}
+ */
 async function extractImages(container) {
     const images = [];
     const imgElements = container.querySelectorAll('img');
@@ -139,10 +179,10 @@ async function extractImages(container) {
         try {
             // Пропускаем очень маленькие изображения (вероятно, иконки)
             if (img.width < 50 || img.height < 50) continue;
-            
+
             const src = img.src || img.getAttribute('data-src');
             if (!src) continue;
-            
+
             // Конвертируем в base64
             const base64 = await imageToBase64(src);
             if (base64) {
@@ -155,49 +195,64 @@ async function extractImages(container) {
                 });
             }
         } catch (error) {
-            console.warn('Ошибка обработки изображения:', error);
+            const err = /** @type {Error} */ (error);
+            console.warn('Ошибка обработки изображения:', err);
         }
     }
     
     return images;
 }
 
+/**
+ * Конвертирует изображение в base64.
+ * @param {string} src
+ * @returns {Promise<string|null>}
+ */
 function imageToBase64(src) {
     return new Promise((resolve) => {
         try {
             const img = new Image();
             img.crossOrigin = 'anonymous';
-            
-            img.onload = function() {
+
+            img.onload = () => {
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d');
-                
-                canvas.width = this.naturalWidth;
-                canvas.height = this.naturalHeight;
-                
-                ctx.drawImage(this, 0, 0);
-                
+                canvas.width = img.naturalWidth;
+                canvas.height = img.naturalHeight;
+                if (!ctx) {
+                    resolve(null);
+                    return;
+                }
+                ctx.drawImage(img, 0, 0);
+
                 try {
                     const dataURL = canvas.toDataURL('image/jpeg', 0.8);
                     resolve(dataURL);
                 } catch (error) {
-                    console.warn('Ошибка конвертации в base64:', error);
+                    const err = /** @type {Error} */ (error);
+                    console.warn('Ошибка конвертации в base64:', err);
                     resolve(null);
                 }
             };
-            
-            img.onerror = function() {
+
+            img.onerror = () => {
                 resolve(null);
             };
-            
+
             img.src = src;
         } catch (error) {
-            console.warn('Ошибка загрузки изображения:', error);
+            const err = /** @type {Error} */ (error);
+            console.warn('Ошибка загрузки изображения:', err);
             resolve(null);
         }
     });
 }
 
+/**
+ * Очищает текст от лишних символов.
+ * @param {string} text
+ * @returns {string}
+ */
 function cleanText(text) {
     return text
         .replace(/\s+/g, ' ')
@@ -206,6 +261,10 @@ function cleanText(text) {
 }
 
 // Вспомогательная функция для отладки
+/**
+ * Вспомогательная функция для отладки
+ * @returns {void}
+ */
 function debugExtraction() {
     const container = document.querySelector('.step-dynamic-container');
     if (container) {
