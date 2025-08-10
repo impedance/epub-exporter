@@ -57,3 +57,108 @@ test('loadJSZip loads JSZip library from local file', async () => {
   assert.equal(typeof JSZip.prototype.file, 'function');
   assert.equal(typeof JSZip.prototype.generateAsync, 'function');
 });
+
+test('loadJSZip throws error when JSZip fails to load from local file', async () => {
+  const gen = new EPUBGenerator();
+  // Save original globals
+  const originalChrome = global.chrome;
+  const originalFetch = global.fetch;
+  
+  try {
+    // Mock chrome.runtime to simulate extension environment
+    global.chrome = {
+      runtime: {
+        getURL: () => 'invalid_path.js'
+      }
+    };
+    // Mock failed fetch with proper response structure
+    global.fetch = async () => {
+      return {
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+        text: async () => { throw new Error('Failed to fetch JSZip') }
+      };
+    };
+    
+    await assert.rejects(
+      gen.loadJSZip(),
+      {
+        name: 'Error',
+        message: /Ошибка загрузки JSZip: Failed to fetch JSZip/
+      }
+    );
+  } finally {
+    // Restore globals
+    global.chrome = originalChrome;
+    global.fetch = originalFetch;
+  }
+});
+
+test('loadJSZip throws error when JSZip integrity check fails', async () => {
+  const gen = new EPUBGenerator();
+  // Save original JSZip
+  const originalJSZip = global.JSZip;
+  
+  try {
+    // Mock a broken JSZip
+    global.JSZip = function() {};
+    JSZip.prototype.file = null;
+    JSZip.prototype.generateAsync = null;
+    
+    await assert.rejects(
+      gen.loadJSZip(),
+      {
+        name: 'Error', 
+        message: /Нарушена целостность уже загруженной библиотеки JSZip/
+      }
+    );
+  } finally {
+    // Restore JSZip
+    global.JSZip = originalJSZip;
+  }
+});
+
+test('loadJSZip throws error when JSZip evaluation fails due to CSP', async (t) => {
+  const gen = new EPUBGenerator();
+  // Save original globals
+  const originalChrome = global.chrome;
+  const originalFetch = global.fetch;
+  const originalFunction = global.Function;
+  const originalJSZip = global.JSZip;
+  
+  try {
+    // Ensure no JSZip is loaded
+    delete global.JSZip;
+    
+    // Mock chrome.runtime to simulate extension environment
+    global.chrome = {
+      runtime: {
+        getURL: () => 'jszip.min.js'
+      }
+    };
+    // Mock successful fetch
+    global.fetch = async () => ({
+      ok: true,
+      text: async () => 'JSZip = {};'
+    });
+    // Mock Function constructor to throw CSP error
+    global.Function = function() {
+      throw new EvalError("Refused to evaluate a string as JavaScript");
+    };
+    
+    await assert.rejects(
+      gen.loadJSZip(),
+      {
+        name: 'EvalError',
+        message: /Refused to evaluate a string as JavaScript/
+      }
+    );
+  } finally {
+    // Restore globals
+    global.chrome = originalChrome;
+    global.fetch = originalFetch;
+    global.Function = originalFunction;
+    global.JSZip = originalJSZip;
+  }
+});

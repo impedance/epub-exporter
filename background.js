@@ -1,4 +1,6 @@
 // Background script для обработки создания EPUB файлов
+import EPUBGenerator from './epub_generator.js';
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'createEPUB') {
         createEPUBFile(request.data)
@@ -10,23 +12,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 async function createEPUBFile(data) {
     try {
-        // Импортируем JSZip из CDN
-        const JSZip = await loadJSZip();
-        
-        // Создаем EPUB файл
-        const epubBlob = await generateEPUB(JSZip, data);
-        
-        // Создаем URL для скачивания
-        const downloadUrl = URL.createObjectURL(epubBlob);
-        
-        // Генерируем имя файла
-        const filename = generateFilename(data.title);
-        
-        return {
-            downloadUrl,
-            filename
-        };
-        
+        const generator = new EPUBGenerator();
+        const { title, content, images, url } = data;
+        const result = await generator.createEPUB(title, content, images, url);
+        return { downloadUrl: result.downloadUrl, filename: result.filename };
     } catch (error) {
         console.error('Ошибка создания EPUB:', error);
         throw error;

@@ -1,5 +1,6 @@
 // EPUB Generator - Утилиты для создания EPUB файлов
-// Этот модуль предоставляет дополнительные функции для генерации EPUB
+// Этот модуль предоставляет дополнительные функции
+import './jszip.min.js';
 
 class EPUBGenerator {
     constructor() {
@@ -14,7 +15,7 @@ class EPUBGenerator {
     }
 
     // Основная функция создания EPUB
-    async createEPUB(title, content, images = []) {
+    async createEPUB(title, content, images = [], url = '') {
         try {
             const JSZip = await this.loadJSZip();
             const zip = new JSZip();
@@ -24,7 +25,8 @@ class EPUBGenerator {
                 title: this.sanitizeTitle(title),
                 content: this.sanitizeContent(content),
                 images: this.processImages(images),
-                id: this.generateUniqueId(),
+                url: url,
+                uuid: this.generateUniqueId(),
                 timestamp: new Date().toISOString()
             };
 
@@ -40,9 +42,8 @@ class EPUBGenerator {
             });
 
             return {
-                blob: epubBlob,
-                filename: this.generateFilename(bookData.title),
-                downloadUrl: URL.createObjectURL(epubBlob)
+                downloadUrl: URL.createObjectURL(epubBlob),
+                filename: this.generateFilename(bookData.title)
             };
 
         } catch (error) {
@@ -52,8 +53,10 @@ class EPUBGenerator {
     }
 
     // Загрузка JSZip библиотеки
-    // AICODE-LINK: ./background.js#loadJSZip
+    // AICODE-LINK: ./background.js#createEPUBFile
     async loadJSZip() {
+        // AICODE-TRAP: JSZip is loaded into global scope via import in Manifest V3 modules, but might not be ready instantly. [2025-08-12]
+        // AICODE-WHY: The import at the top of the module handles loading. This function now just validates that it's loaded. [2025-08-12]
         if (typeof JSZip !== 'undefined') {
             // Проверяем целостность уже загруженной библиотеки
             if (!this.validateJSZipIntegrity(JSZip)) {
@@ -61,61 +64,7 @@ class EPUBGenerator {
             }
             return JSZip;
         }
-
-        let scriptText;
-        let JSZipInstance;
-        
-        try {
-            if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
-                // В окружении расширения Chrome
-                const jszipUrl = chrome.runtime.getURL('jszip.min.js');
-                const response = await fetch(jszipUrl);
-                if (!response.ok) {
-                    throw new Error(`Failed to fetch JSZip: ${response.status} ${response.statusText}`);
-                }
-                scriptText = await response.text();
-            } else {
-                // В Node.js окружении
-                const fs = require('fs/promises');
-                const path = require('path');
-                const jszipPath = path.join(__dirname, 'jszip.min.js');
-                scriptText = await fs.readFile(jszipPath, 'utf8');
-            }
-
-            try {
-                JSZipInstance = new Function(`${scriptText}; return JSZip;`)();
-            } catch (evalError) {
-                if (evalError instanceof EvalError) {
-                    throw new EvalError(`JSZip evaluation blocked by CSP: ${evalError.message}`);
-                }
-                throw evalError;
-            }
-
-            if (typeof JSZipInstance === 'undefined') {
-                throw new Error('JSZip не инициализирован после загрузки из локального файла');
-            }
-
-            // Проверяем целостность загруженной библиотеки
-            if (!this.validateJSZipIntegrity(JSZipInstance)) {
-                throw new Error('Нарушена целостность библиотеки JSZip после загрузки');
-            }
-
-            return JSZipInstance;
-        } catch (error) {
-            // Очищаем глобальную переменную в случае ошибки
-            if (typeof JSZipInstance !== 'undefined') {
-                try {
-                    delete global.JSZip;
-                } catch (cleanupError) {
-                    console.error('Ошибка очистки JSZip:', cleanupError);
-                }
-            }
-            
-            if (error instanceof EvalError) {
-                throw error; // Пробрасываем EvalError как есть
-            }
-            throw new Error(`Ошибка загрузки JSZip: ${error.message}`);
-        }
+        throw new Error('Библиотека JSZip не загружена. Проверьте импорт в модуле.');
     }
 
     validateJSZipIntegrity(JSZipInstance) {
@@ -417,12 +366,4 @@ li {
     }
 }
 
-// Экспорт для использования в других модулях
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = EPUBGenerator;
-}
-
-// Глобальная переменная для использования в браузере
-if (typeof window !== 'undefined') {
-    window.EPUBGenerator = EPUBGenerator;
-}
+export default EPUBGenerator;
