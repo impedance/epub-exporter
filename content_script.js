@@ -2,24 +2,11 @@
 /* global chrome */
 // Content script для извлечения контента страницы
 /* AICODE-WHY: JSDoc types formalize the content contract for cross-module reuse [2025-08-13] */
+// AICODE-LINK: ./types.d.ts#ExtractedImage
+// AICODE-LINK: ./types.d.ts#ExtractedContent
 
-/**
- * @typedef {Object} ExtractedImage
- * @property {string} src
- * @property {string} base64
- * @property {string} alt
- * @property {number|string} width
- * @property {number|string} height
- */
-
-/**
- * @typedef {Object} ExtractedContent
- * @property {string} title
- * @property {string} content
- * @property {ExtractedImage[]} images
- * @property {string} url
- * @property {string} timestamp
- */
+/** @typedef {import('./types').ExtractedImage} ExtractedImage */
+/** @typedef {import('./types').ExtractedContent} ExtractedContent */
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'extractContent') {
         extractPageContent()

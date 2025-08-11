@@ -3,24 +3,11 @@
 // AICODE-TRAP: tabs.sendMessage fails if content script isn't injected [2025-08-10]
 // AICODE-WHY: Inject content script on demand to handle pages without automatic injection [2025-08-10]
 // AICODE-LINK: ./content_script.js#extractPageContent
+// AICODE-LINK: ./types.d.ts#ExtractedImage
+// AICODE-LINK: ./types.d.ts#ExtractedContent
 
-/**
- * @typedef {Object} ExtractedImage
- * @property {string} src
- * @property {string} base64
- * @property {string} alt
- * @property {number|string} width
- * @property {number|string} height
- */
-
-/**
- * @typedef {Object} ExtractedContent
- * @property {string} title
- * @property {string} content
- * @property {ExtractedImage[]} images
- * @property {string} url
- * @property {string} timestamp
- */
+/** @typedef {import('./types').ExtractedImage} ExtractedImage */
+/** @typedef {import('./types').ExtractedContent} ExtractedContent */
 
 /**
  * Отправляет запрос на извлечение контента из вкладки.
