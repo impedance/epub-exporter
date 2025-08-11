@@ -1,6 +1,6 @@
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const { extractContentFromTab } = require('./extractContent');
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { extractContentFromTab } from './extractContent.js';
 
 test('injects content script when missing', async (t) => {
   let call = 0;

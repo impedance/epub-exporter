@@ -76,8 +76,28 @@ class EPUBGenerator {
                 compressionOptions: { level: 9 }
             });
 
+            let downloadUrl;
+            // AICODE-TRAP: Service workers may lack URL.createObjectURL; convert blob to data URL fallback [2025-08-14]
+            if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+                downloadUrl = URL.createObjectURL(epubBlob);
+            } else {
+                const buffer = await epubBlob.arrayBuffer();
+                let base64;
+                if (typeof btoa === 'function') {
+                    let binary = '';
+                    const bytes = new Uint8Array(buffer);
+                    for (let i = 0; i < bytes.length; i++) {
+                        binary += String.fromCharCode(bytes[i]);
+                    }
+                    base64 = btoa(binary);
+                } else {
+                    base64 = Buffer.from(buffer).toString('base64');
+                }
+                downloadUrl = `data:application/epub+zip;base64,${base64}`;
+            }
+
             return {
-                downloadUrl: URL.createObjectURL(epubBlob),
+                downloadUrl,
                 filename: this.generateFilename(bookData.title)
             };
 
