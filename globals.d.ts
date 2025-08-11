@@ -2,4 +2,5 @@
 declare const chrome: any;
 declare const JSZip: any;
 declare const module: any;
-declare function extractContentFromTab(tabId: number): Promise<any>;
+// AICODE-LINK: ./types.d.ts#ExtractedContent
+declare function extractContentFromTab(tabId: number): Promise<{success: boolean, data?: import('./types').ExtractedContent, error?: string}>;
