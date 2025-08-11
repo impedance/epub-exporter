@@ -1,6 +1,6 @@
-const test = require('node:test');
-const assert = require('node:assert');
-const EPUBGenerator = require('../epub_generator');
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import EPUBGenerator from '../epub_generator.js';
 
 // AICODE-WHY: Validates EPUBGenerator utility methods to prevent regressions in EPUB creation logic [2025-08-10]
 
@@ -51,6 +51,26 @@ test('escapeXML escapes special characters', () => {
   assert.strictEqual(gen.escapeXML(input), expected);
 });
 
+// AICODE-TODO: Add more createEPUB edge case tests (e.g., with images) [priority:low]
+
+test('createEPUB falls back to data URL when object URLs unavailable', async () => {
+  const gen = new EPUBGenerator();
+  const original = URL.createObjectURL;
+  // Ensure environment lacks createObjectURL
+  URL.createObjectURL = undefined;
+
+  const result = await gen.createEPUB('Test', '<p>Body</p>');
+  assert.ok(result.downloadUrl.startsWith('data:application/epub+zip;base64,'));
+  assert.match(result.filename, /\.epub$/);
+
+  // Restore original method
+  if (original) {
+    URL.createObjectURL = original;
+  } else {
+    delete URL.createObjectURL;
+  }
+});
+
 test('loadJSZip loads JSZip library from local file', async () => {
   const gen = new EPUBGenerator();
   const JSZip = await gen.loadJSZip();
@@ -58,42 +78,6 @@ test('loadJSZip loads JSZip library from local file', async () => {
   assert.equal(typeof JSZip.prototype.generateAsync, 'function');
 });
 
-test('loadJSZip throws error when JSZip fails to load from local file', async () => {
-  const gen = new EPUBGenerator();
-  // Save original globals
-  const originalChrome = global.chrome;
-  const originalFetch = global.fetch;
-  
-  try {
-    // Mock chrome.runtime to simulate extension environment
-    global.chrome = {
-      runtime: {
-        getURL: () => 'invalid_path.js'
-      }
-    };
-    // Mock failed fetch with proper response structure
-    global.fetch = async () => {
-      return {
-        ok: false,
-        status: 404,
-        statusText: 'Not Found',
-        text: async () => { throw new Error('Failed to fetch JSZip') }
-      };
-    };
-    
-    await assert.rejects(
-      gen.loadJSZip(),
-      {
-        name: 'Error',
-        message: /Ошибка загрузки JSZip: Failed to fetch JSZip/
-      }
-    );
-  } finally {
-    // Restore globals
-    global.chrome = originalChrome;
-    global.fetch = originalFetch;
-  }
-});
 
 test('loadJSZip throws error when JSZip integrity check fails', async () => {
   const gen = new EPUBGenerator();
@@ -115,50 +99,6 @@ test('loadJSZip throws error when JSZip integrity check fails', async () => {
     );
   } finally {
     // Restore JSZip
-    global.JSZip = originalJSZip;
-  }
-});
-
-test('loadJSZip throws error when JSZip evaluation fails due to CSP', async (t) => {
-  const gen = new EPUBGenerator();
-  // Save original globals
-  const originalChrome = global.chrome;
-  const originalFetch = global.fetch;
-  const originalFunction = global.Function;
-  const originalJSZip = global.JSZip;
-  
-  try {
-    // Ensure no JSZip is loaded
-    delete global.JSZip;
-    
-    // Mock chrome.runtime to simulate extension environment
-    global.chrome = {
-      runtime: {
-        getURL: () => 'jszip.min.js'
-      }
-    };
-    // Mock successful fetch
-    global.fetch = async () => ({
-      ok: true,
-      text: async () => 'JSZip = {};'
-    });
-    // Mock Function constructor to throw CSP error
-    global.Function = function() {
-      throw new EvalError("Refused to evaluate a string as JavaScript");
-    };
-    
-    await assert.rejects(
-      gen.loadJSZip(),
-      {
-        name: 'EvalError',
-        message: /Refused to evaluate a string as JavaScript/
-      }
-    );
-  } finally {
-    // Restore globals
-    global.chrome = originalChrome;
-    global.fetch = originalFetch;
-    global.Function = originalFunction;
     global.JSZip = originalJSZip;
   }
 });

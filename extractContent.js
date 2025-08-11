@@ -1,5 +1,5 @@
 // @ts-check
-/* global chrome, module, window */
+/* global chrome, window */
 // AICODE-TRAP: tabs.sendMessage fails if content script isn't injected [2025-08-10]
 // AICODE-WHY: Inject content script on demand to handle pages without automatic injection [2025-08-10]
 // AICODE-LINK: ./content_script.js#extractPageContent
@@ -14,7 +14,7 @@
  * @param {number} tabId
  * @returns {Promise<{success: boolean, data?: ExtractedContent, error?: string}>}
  */
-async function extractContentFromTab(tabId) {
+export async function extractContentFromTab(tabId) {
   try {
     return await chrome.tabs.sendMessage(tabId, { action: 'extractContent' });
   } catch (err) {
@@ -34,6 +34,3 @@ if (typeof window !== 'undefined') {
   /** @type {any} */ (window).extractContentFromTab = extractContentFromTab;
 }
 
-if (typeof module !== 'undefined') {
-  module.exports = { extractContentFromTab };
-}
