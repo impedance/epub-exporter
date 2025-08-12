@@ -392,11 +392,26 @@ pre, code {
 
 ul, ol {
     margin: 1em 0;
-    padding-left: 2em;
+    padding-left: 1.5em;
+}
+
+ul {
+    list-style-type: disc;
+}
+
+ol {
+    list-style-type: decimal;
 }
 
 li {
-    margin: 0.3em 0;
+    margin: 0.5em 0;
+    padding-left: 0.2em;
+    line-height: 1.4;
+}
+
+li p {
+    margin: 0.2em 0;
+    text-indent: 0;
 }`;
     }
 

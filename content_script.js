@@ -106,51 +106,158 @@ async function extractTextContent(container) {
         elements.forEach(el => el.remove());
     });
     
-    // Извлекаем и форматируем текст
-    const textElements = clone.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote, pre, code');
+    // Извлекаем контент с сохранением структуры
     let formattedContent = '';
+    const processedElements = new Set(); // Отслеживаем обработанные элементы
     
-    textElements.forEach(element => {
-        const text = cleanText(element.textContent);
-        if (text) {
-            const tagName = element.tagName.toLowerCase();
-            
-            switch (tagName) {
-                case 'h1':
-                case 'h2':
-                case 'h3':
-                case 'h4':
-                case 'h5':
-                case 'h6':
-                    formattedContent += `\n<${tagName}>${text}</${tagName}>\n`;
-                    break;
-                case 'blockquote':
-                    formattedContent += `\n<blockquote>${text}</blockquote>\n`;
-                    break;
-                case 'pre':
-                case 'code':
-                    formattedContent += `\n<pre><code>${text}</code></pre>\n`;
-                    break;
-                case 'li':
-                    formattedContent += `<li>${text}</li>\n`;
-                    break;
-                default:
-                    formattedContent += `<p>${text}</p>\n`;
+    // Обрабатываем элементы в порядке появления в документе
+    const walker = document.createTreeWalker(
+        clone,
+        NodeFilter.SHOW_ELEMENT,
+        {
+            acceptNode: function(node) {
+                const tagName = node.tagName.toLowerCase();
+                if (['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'blockquote', 'pre', 'div'].includes(tagName)) {
+                    return NodeFilter.FILTER_ACCEPT;
+                }
+                return NodeFilter.FILTER_SKIP;
             }
+        }
+    );
+
+    let node;
+    while (node = walker.nextNode()) {
+        if (processedElements.has(node) || isChildOfProcessedElement(node, processedElements)) {
+            continue;
+        }
+
+        const content = processElement(node);
+        if (content.trim()) {
+            formattedContent += content + '\n';
+            processedElements.add(node);
+        }
+    }
+
+    // Если структурированный контент найден, возвращаем его
+    if (formattedContent.trim()) {
+        return formattedContent;
+    }
+    
+    // Если структурированный контент не найден, извлекаем весь текст
+    const allText = cleanText(clone.textContent);
+    if (allText) {
+        // Разбиваем на абзацы по двойным переносам строк
+        const paragraphs = allText.split(/\n\s*\n/).filter(p => p.trim());
+        return paragraphs.map(p => `<p>${p.trim()}</p>`).join('\n');
+    }
+    
+    return '';
+}
+
+/**
+ * Проверяет, является ли элемент потомком уже обработанного элемента
+ * @param {Element} element
+ * @param {Set<Element>} processedElements
+ * @returns {boolean}
+ */
+function isChildOfProcessedElement(element, processedElements) {
+    let parent = element.parentElement;
+    while (parent) {
+        if (processedElements.has(parent)) {
+            return true;
+        }
+        parent = parent.parentElement;
+    }
+    return false;
+}
+
+/**
+ * Обрабатывает отдельный элемент и возвращает его HTML представление
+ * @param {Element} element
+ * @returns {string}
+ */
+function processElement(element) {
+    const tagName = element.tagName.toLowerCase();
+    
+    switch (tagName) {
+        case 'h1':
+        case 'h2':
+        case 'h3':
+        case 'h4':
+        case 'h5':
+        case 'h6':
+            const headerText = cleanText(element.textContent);
+            return headerText ? `<${tagName}>${headerText}</${tagName}>` : '';
+            
+        case 'p':
+            const pText = cleanText(element.textContent);
+            return pText ? `<p>${pText}</p>` : '';
+            
+        case 'blockquote':
+            const quoteText = cleanText(element.textContent);
+            return quoteText ? `<blockquote>${quoteText}</blockquote>` : '';
+            
+        case 'pre':
+            const preText = cleanText(element.textContent);
+            return preText ? `<pre><code>${preText}</code></pre>` : '';
+            
+        case 'ul':
+        case 'ol':
+            return processList(element, tagName);
+            
+        case 'div':
+            // Обрабатываем div только если он содержит прямой текстовый контент
+            const directText = getDirectTextContent(element);
+            if (directText && directText.trim()) {
+                return `<p>${cleanText(directText)}</p>`;
+            }
+            return '';
+            
+        default:
+            return '';
+    }
+}
+
+/**
+ * Обрабатывает списки (ul/ol) с сохранением структуры
+ * @param {Element} listElement
+ * @param {string} tagName
+ * @returns {string}
+ */
+function processList(listElement, tagName) {
+    const listItems = listElement.querySelectorAll(':scope > li');
+    if (listItems.length === 0) {
+        return '';
+    }
+    
+    let listContent = '';
+    listItems.forEach(li => {
+        const liText = cleanText(li.textContent);
+        if (liText) {
+            listContent += `    <li>${liText}</li>\n`;
         }
     });
     
-    // Если структурированный контент не найден, извлекаем весь текст
-    if (!formattedContent.trim()) {
-        const allText = cleanText(clone.textContent);
-        if (allText) {
-            // Разбиваем на абзацы по двойным переносам строк
-            const paragraphs = allText.split(/\n\s*\n/).filter(p => p.trim());
-            formattedContent = paragraphs.map(p => `<p>${p.trim()}</p>`).join('\n');
-        }
+    if (listContent) {
+        return `<${tagName}>\n${listContent}</${tagName}>`;
     }
     
-    return formattedContent;
+    return '';
+}
+
+/**
+ * Получает прямой текстовый контент элемента (без вложенных элементов)
+ * @param {Element} element
+ * @returns {string}
+ */
+function getDirectTextContent(element) {
+    let text = '';
+    for (let node of element.childNodes) {
+        if (node.nodeType === Node.TEXT_NODE) {
+            text += node.textContent;
+        }
+    }
+    return text;
 }
 
 /**
