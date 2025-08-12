@@ -61,7 +61,7 @@
         .dropbox-option {
             display: flex;
             align-items: center;
-            justify-content: space-between;
+            justify-content: center;
             margin-bottom: 10px;
         }
         
@@ -81,7 +81,7 @@
         .dropbox-status {
             font-size: 12px;
             opacity: 0.8;
-            margin-bottom: 8px;
+            text-align: center;
         }
         
         .dropbox-status.connected {
@@ -90,22 +90,6 @@
         
         .dropbox-status.disconnected {
             color: #FF9800;
-        }
-        
-        .settings-btn {
-            background: none;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            color: white;
-            padding: 6px 12px;
-            border-radius: 15px;
-            cursor: pointer;
-            font-size: 12px;
-            transition: all 0.3s ease;
-        }
-        
-        .settings-btn:hover {
-            background: rgba(255, 255, 255, 0.2);
-            border-color: rgba(255, 255, 255, 0.5);
         }
         
         .progress {
@@ -177,19 +161,13 @@
         
         <!-- Dropbox Section -->
         <div class="dropbox-section">
-            <div id="dropboxStatus" class="dropbox-status disconnected">
-                📁 Dropbox не подключен
-            </div>
-            
             <div class="dropbox-option">
                 <label for="uploadToDropbox">
-                    <input type="checkbox" id="uploadToDropbox" disabled>
-                    Загрузить в Dropbox
+                    <input type="checkbox" id="uploadToDropbox">
+                    📁 Загрузить в Dropbox
                 </label>
-                <button id="settingsBtn" class="settings-btn" title="Настройки Dropbox">
-                    ⚙️
-                </button>
             </div>
+            <div id="dropboxStatus" class="dropbox-status"></div>
         </div>
         
         <button id="exportBtn" class="export-btn">
