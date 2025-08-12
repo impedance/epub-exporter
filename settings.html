@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Настройки EPUB Экспортер</title>
+    <style>
+        body {
+            width: 400px;
+            padding: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 500px;
+        }
+        
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        h1 {
+            margin: 0 0 20px 0;
+            font-size: 20px;
+            font-weight: 600;
+            text-align: center;
+        }
+        
+        .section {
+            margin-bottom: 25px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .section:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+        
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .status {
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .status.connected {
+            background: rgba(76, 175, 80, 0.3);
+            border: 1px solid rgba(76, 175, 80, 0.5);
+        }
+        
+        .status.disconnected {
+            background: rgba(255, 152, 0, 0.3);
+            border: 1px solid rgba(255, 152, 0, 0.5);
+        }
+        
+        .btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            width: 100%;
+        }
+        
+        .btn:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.3);
+            border-color: rgba(255, 255, 255, 0.5);
+            transform: translateY(-2px);
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .btn.primary {
+            background: rgba(76, 175, 80, 0.3);
+            border-color: rgba(76, 175, 80, 0.5);
+        }
+        
+        .btn.danger {
+            background: rgba(244, 67, 54, 0.3);
+            border-color: rgba(244, 67, 54, 0.5);
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .form-group input {
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        
+        .form-group input::placeholder {
+            color: rgba(255, 255, 255, 0.7);
+        }
+        
+        .form-group input:focus {
+            outline: none;
+            border-color: rgba(255, 255, 255, 0.6);
+            background: rgba(255, 255, 255, 0.15);
+        }
+        
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .spinner {
+            width: 24px;
+            height: 24px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top: 2px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error {
+            background: rgba(244, 67, 54, 0.3);
+            border: 1px solid rgba(244, 67, 54, 0.5);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-top: 10px;
+            font-size: 13px;
+            display: none;
+        }
+        
+        .success {
+            background: rgba(76, 175, 80, 0.3);
+            border: 1px solid rgba(76, 175, 80, 0.5);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-top: 10px;
+            font-size: 13px;
+            display: none;
+        }
+        
+        .back-btn {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            opacity: 0.7;
+            transition: opacity 0.3s;
+        }
+        
+        .back-btn:hover {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <button class="back-btn" id="backBtn" title="Назад">←</button>
+    
+    <div class="container">
+        <h1>⚙️ Настройки</h1>
+        
+        <!-- Dropbox Section -->
+        <div class="section">
+            <div class="section-title">
+                📁 Dropbox интеграция
+            </div>
+            
+            <div id="dropboxStatus" class="status disconnected">
+                <span>🔸</span>
+                <span id="statusText">Dropbox не подключен</span>
+            </div>
+            
+            <div id="userInfo" class="user-info" style="display: none;">
+                <div class="user-avatar">
+                    <span id="userInitial">?</span>
+                </div>
+                <div>
+                    <div id="userName" style="font-weight: 600;"></div>
+                    <div id="userEmail" style="font-size: 12px; opacity: 0.8;"></div>
+                </div>
+            </div>
+            
+            <div id="connectSection">
+                <button id="connectBtn" class="btn primary">
+                    Подключить Dropbox
+                </button>
+            </div>
+            
+            <div id="connectedSection" style="display: none;">
+                <button id="disconnectBtn" class="btn danger">
+                    Отключить Dropbox
+                </button>
+            </div>
+            
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <div>Подключение к Dropbox...</div>
+            </div>
+        </div>
+        
+        <!-- Settings Section -->
+        <div class="section">
+            <div class="section-title">
+                📂 Настройки папки
+            </div>
+            
+            <div class="form-group">
+                <label for="folderPath">Папка в Dropbox:</label>
+                <input 
+                    type="text" 
+                    id="folderPath" 
+                    placeholder="/Apps/EPUB Exporter"
+                    value="/Apps/EPUB Exporter"
+                >
+            </div>
+            
+            <button id="saveFolderBtn" class="btn">
+                Сохранить настройки
+            </button>
+        </div>
+        
+        <!-- Auto-upload Section -->
+        <div class="section">
+            <div class="section-title">
+                🚀 Автоматическая загрузка
+            </div>
+            
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="autoUpload" style="width: auto; margin-right: 8px;">
+                    Автоматически загружать в Dropbox при экспорте
+                </label>
+            </div>
+        </div>
+        
+        <div class="error" id="errorMessage"></div>
+        <div class="success" id="successMessage"></div>
+    </div>
+    
+    <script src="config.js"></script>
+    <script src="dropbox_client.js" type="module"></script>
+    <script src="settings.js"></script>
+</body>
+</html>
