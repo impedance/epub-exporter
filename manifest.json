@@ -1,12 +1,18 @@
 {
   "manifest_version": 3,
   "name": "EPUB Экспортер",
-  "version": "1.0.0",
-  "description": "Экспорт контента веб-страниц в формат EPUB для PocketBook",
+  "version": "1.1.0",
+  "description": "Экспорт контента веб-страниц в формат EPUB для PocketBook с интеграцией Dropbox",
   "permissions": [
     "activeTab",
     "downloads",
-    "scripting"
+    "scripting",
+    "identity",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://api.dropboxapi.com/*",
+    "https://www.dropbox.com/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -24,11 +30,21 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["epub_generator.js", "jszip.min.js"],
+      "resources": [
+        "epub_generator.js", 
+        "jszip.min.js", 
+        "config.js",
+        "dropbox_client.js",
+        "settings.html"
+      ],
       "matches": ["<all_urls>"]
     }
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; style-src 'self' 'unsafe-inline'; default-src 'self'"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval' https://cdnjs.cloudflare.com; object-src 'self'; style-src 'self' 'unsafe-inline'; default-src 'self'"
+  },
+  "oauth2": {
+    "client_id": "your_dropbox_app_key_here",
+    "scopes": ["https://www.googleapis.com/auth/userinfo.email"]
   }
 }
