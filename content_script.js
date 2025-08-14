@@ -431,3 +431,18 @@ function debugExtraction() {
         console.log('Пожалуйста, выделите текст на странице');
     }
 }
+
+// Экспорт функций для тестирования
+if (typeof window !== 'undefined') {
+    window.extractPageContent = extractPageContent;
+    window.extractSelectedContent = extractSelectedContent;
+    window.extractTitle = extractTitle;
+    window.cleanText = cleanText;
+    window.extractImagesFromSelection = extractImagesFromSelection;
+    window.extractImages = extractImages;
+    window.processList = processList;
+    window.getDirectTextContent = getDirectTextContent;
+    window.isChildOfProcessedElement = isChildOfProcessedElement;
+    window.processElement = processElement;
+    window.debugExtraction = debugExtraction;
+}
