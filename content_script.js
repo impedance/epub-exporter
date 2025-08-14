@@ -22,24 +22,24 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
  */
 async function extractPageContent() {
     try {
-        // Ищем основной контейнер с контентом
-        const container = document.querySelector('.step-dynamic-container');
+        // Получаем выделенный текст
+        const selection = window.getSelection();
         
-        if (!container) {
-            throw new Error('Контейнер .step-dynamic-container не найден на странице');
+        if (!selection || selection.rangeCount === 0 || selection.toString().trim() === '') {
+            throw new Error('Пожалуйста, выделите текст на странице для экспорта');
         }
 
         // Извлекаем заголовок
         let title = extractTitle();
         
-        // Извлекаем текстовый контент
-        const content = await extractTextContent(container);
+        // Извлекаем выделенный контент
+        const content = await extractSelectedContent(selection);
         
-        // Извлекаем изображения
-        const images = await extractImages(container);
+        // Извлекаем изображения из выделенного содержимого
+        const images = await extractImagesFromSelection(selection);
         
         if (!content.trim()) {
-            throw new Error('Контент не найден или пуст');
+            throw new Error('Выделенный контент пуст');
         }
 
         return {
@@ -84,11 +84,73 @@ function extractTitle() {
 }
 
 /**
- * Извлекает текстовое содержимое из контейнера.
+ * Извлекает выделенное содержимое.
+ * @param {Selection} selection
+ * @returns {Promise<string>}
+ */
+async function extractSelectedContent(selection) {
+    try {
+        // Создаем временный контейнер для работы с выделенным содержимым
+        const tempDiv = document.createElement('div');
+        
+        // Копируем все выделенные range в временный контейнер
+        for (let i = 0; i < selection.rangeCount; i++) {
+            const range = selection.getRangeAt(i);
+            const contents = range.cloneContents();
+            tempDiv.appendChild(contents);
+        }
+        
+        // Обрабатываем содержимое так же, как и контейнерное содержимое
+        return await extractTextContentFromElement(tempDiv);
+    } catch (error) {
+        // Если не удается извлечь HTML структуру, используем простой текст
+        const selectedText = selection.toString().trim();
+        if (selectedText) {
+            // Разбиваем на абзацы по двойным переносам строк
+            const paragraphs = selectedText.split(/\n\s*\n/).filter(p => p.trim());
+            if (paragraphs.length > 1) {
+                return paragraphs.map(p => `<p>${cleanText(p.trim())}</p>`).join('\n');
+            } else {
+                // Если это один блок текста, просто оборачиваем в параграф
+                return `<p>${cleanText(selectedText)}</p>`;
+            }
+        }
+        return '';
+    }
+}
+
+/**
+ * Извлекает изображения из выделенного содержимого.
+ * @param {Selection} selection
+ * @returns {Promise<ExtractedImage[]>}
+ */
+async function extractImagesFromSelection(selection) {
+    const images = [];
+    
+    try {
+        // Создаем временный контейнер для поиска изображений
+        const tempDiv = document.createElement('div');
+        
+        for (let i = 0; i < selection.rangeCount; i++) {
+            const range = selection.getRangeAt(i);
+            const contents = range.cloneContents();
+            tempDiv.appendChild(contents);
+        }
+        
+        // Используем существующую функцию для извлечения изображений
+        return await extractImages(tempDiv);
+    } catch (error) {
+        console.warn('Ошибка извлечения изображений из выделения:', error);
+        return [];
+    }
+}
+
+/**
+ * Извлекает текстовое содержимое из элемента.
  * @param {Element} container
  * @returns {Promise<string>}
  */
-async function extractTextContent(container) {
+async function extractTextContentFromElement(container) {
     // Клонируем контейнер для безопасной обработки
     const clone = /** @type {HTMLElement} */ (container.cloneNode(true));
     
@@ -360,12 +422,12 @@ function cleanText(text) {
  * @returns {void}
  */
 function debugExtraction() {
-    const container = document.querySelector('.step-dynamic-container');
-    if (container) {
-        console.log('Найден контейнер:', container);
-        console.log('Содержимое:', container.innerHTML.substring(0, 500) + '...');
+    const selection = window.getSelection();
+    if (selection && selection.rangeCount > 0 && selection.toString().trim()) {
+        console.log('Найдено выделение:', selection.toString().substring(0, 500) + '...');
+        console.log('Количество диапазонов:', selection.rangeCount);
     } else {
-        console.log('Контейнер .step-dynamic-container не найден');
-        console.log('Доступные классы:', Array.from(document.querySelectorAll('[class]')).map(el => el.className));
+        console.log('Нет выделенного текста');
+        console.log('Пожалуйста, выделите текст на странице');
     }
 }
