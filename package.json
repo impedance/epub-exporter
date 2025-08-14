@@ -5,10 +5,15 @@
   "main": "background.js",
   "scripts": {
     "test": "node --test",
+    "test:verbose": "node test_runner.js",
+    "test:functions": "node --test test/content_functions.test.mjs",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "module"
+  "type": "module",
+  "devDependencies": {
+    "jsdom": "^26.1.0"
+  }
 }
