@@ -115,14 +115,27 @@ test('extractSelectedContent preserves HTML structure', async (t) => {
     const htmlContent = '<h1>Title</h1><p>Content with <strong>bold</strong> text</p><ul><li>List item</li></ul>';
     const { dom } = createMockSelection('Title Content with bold text List item', htmlContent);
     await loadContentScript(dom);
-    
+
     const selection = dom.window.getSelection();
     const result = await dom.window.extractSelectedContent(selection);
-    
+
     assert.ok(result.includes('<h1>Title</h1>'));
     assert.ok(result.includes('<p>Content with bold text</p>'));
     assert.ok(result.includes('<ul>'));
     assert.ok(result.includes('<li>List item</li>'));
+});
+
+test('extractSelectedContent retains image tags', async (t) => {
+    const base64Img = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+    const htmlContent = `<p>Text</p><img src="${base64Img}" width="100" height="100" alt="test">`;
+    const { dom } = createMockSelection('Text', htmlContent);
+    await loadContentScript(dom);
+
+    const selection = dom.window.getSelection();
+    const result = await dom.window.extractSelectedContent(selection);
+
+    assert.ok(result.includes('<img'));
+    assert.ok(result.includes(base64Img));
 });
 
 test('extractPageContent throws error when no text is selected', async (t) => {

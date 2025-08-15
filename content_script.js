@@ -173,13 +173,14 @@ async function extractTextContentFromElement(container) {
     const processedElements = new Set(); // Отслеживаем обработанные элементы
     
     // Обрабатываем элементы в порядке появления в документе
+    // AICODE-WHY: Including images preserves visual context in exported EPUB [2025-08-14]
     const walker = document.createTreeWalker(
         clone,
         NodeFilter.SHOW_ELEMENT,
         {
             acceptNode: function(node) {
                 const tagName = node.tagName.toLowerCase();
-                if (['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'blockquote', 'pre', 'div'].includes(tagName)) {
+                if (['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'blockquote', 'pre', 'div', 'img'].includes(tagName)) {
                     return NodeFilter.FILTER_ACCEPT;
                 }
                 return NodeFilter.FILTER_SKIP;
@@ -266,7 +267,17 @@ function processElement(element) {
         case 'ul':
         case 'ol':
             return processList(element, tagName);
-            
+
+        case 'img': {
+            const src = element.getAttribute('src') || element.getAttribute('data-src');
+            if (!src) return '';
+            const alt = cleanText(element.getAttribute('alt') || '');
+            const width = element.getAttribute('width') || element.width;
+            const height = element.getAttribute('height') || element.height;
+            // AICODE-TRAP: Preserve original src so EPUB generator can map to downloaded file [2025-08-14]
+            return `<img src="${src}" alt="${alt}"${width ? ` width="${width}"` : ''}${height ? ` height="${height}"` : ''}/>`;
+        }
+
         case 'div':
             // Обрабатываем div только если он содержит прямой текстовый контент
             const directText = getDirectTextContent(element);

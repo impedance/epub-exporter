@@ -51,7 +51,28 @@ test('escapeXML escapes special characters', () => {
   assert.strictEqual(gen.escapeXML(input), expected);
 });
 
-// AICODE-TODO: Add more createEPUB edge case tests (e.g., with images) [priority:low]
+test('createEPUB embeds images and references them', async () => {
+  const gen = new EPUBGenerator();
+  const imgSrc = 'http://example.com/img.png';
+  const base64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+  let capturedBlob;
+  const originalCreate = URL.createObjectURL;
+  URL.createObjectURL = (blob) => { capturedBlob = blob; return 'blob:mock'; };
+
+  const content = `<p>Text</p><img src="${imgSrc}"/>`;
+  const images = [{ src: imgSrc, base64 }];
+  const result = await gen.createEPUB('Title', content, images);
+
+  assert.equal(result.downloadUrl, 'blob:mock');
+  const buffer = await capturedBlob.arrayBuffer();
+  const JSZipLib = await gen.loadJSZip();
+  const zip = await JSZipLib.loadAsync(buffer);
+  assert.ok(zip.file('OEBPS/images/img_1.png'));
+  const chapter = await zip.file('OEBPS/chapter1.xhtml').async('string');
+  assert.ok(chapter.includes('img src="images/img_1.png"'));
+
+  URL.createObjectURL = originalCreate;
+});
 
 test('createEPUB falls back to data URL when object URLs unavailable', async () => {
   const gen = new EPUBGenerator();
