@@ -64,10 +64,28 @@ class DropboxClient {
      * @returns {boolean}
      */
     isConfigured() {
-        return !!(DROPBOX_CONFIG.APP_KEY && 
-                  DROPBOX_CONFIG.APP_SECRET && 
+        return !!(DROPBOX_CONFIG.APP_KEY &&
+                  DROPBOX_CONFIG.APP_SECRET &&
                   DROPBOX_CONFIG.REFRESH_TOKEN &&
                   DROPBOX_CONFIG.APP_KEY !== 'your_dropbox_app_key_here');
+    }
+
+    /**
+     * Проверяет подключение к Dropbox и валидность конфигурации
+     * @returns {Promise<boolean>}
+     */
+    async isConnected() {
+        if (!this.isConfigured()) {
+            return false;
+        }
+        try {
+            await this.getUserInfo();
+            return true;
+        } catch (error) {
+            // AICODE-TRAP: Ошибки сети или токена считаем отсутствием подключения [2025-02-14]
+            console.error('Dropbox connection check failed:', error);
+            return false;
+        }
     }
 
     /**
