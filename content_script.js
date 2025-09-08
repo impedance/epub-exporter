@@ -180,7 +180,7 @@ async function extractTextContentFromElement(container) {
         {
             acceptNode: function(node) {
                 const tagName = node.tagName.toLowerCase();
-                if (['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'blockquote', 'pre', 'div', 'img'].includes(tagName)) {
+                if (['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'blockquote', 'pre', 'code', 'div', 'img'].includes(tagName)) {
                     return NodeFilter.FILTER_ACCEPT;
                 }
                 return NodeFilter.FILTER_SKIP;
@@ -261,9 +261,27 @@ function processElement(element) {
             return quoteText ? `<blockquote>${quoteText}</blockquote>` : '';
             
         case 'pre':
-            const preText = cleanText(element.textContent);
-            return preText ? `<pre><code>${preText}</code></pre>` : '';
+            // Проверяем, есть ли внутри code элемент с data-highlighted
+            const codeElement = element.querySelector('code[data-highlighted="yes"]');
+            if (codeElement) {
+                // Сохраняем оригинальное форматирование для подсвеченного кода
+                const codeContent = codeElement.innerHTML;
+                return `<pre><code>${codeContent}</code></pre>`;
+            } else {
+                const preText = cleanText(element.textContent);
+                return preText ? `<pre><code>${preText}</code></pre>` : '';
+            }
             
+        case 'code':
+            // Обрабатываем отдельные элементы code с подсветкой синтаксиса
+            if (element.getAttribute('data-highlighted') === 'yes') {
+                const codeContent = element.innerHTML;
+                return `<code>${codeContent}</code>`;
+            } else {
+                const codeText = cleanText(element.textContent);
+                return codeText ? `<code>${codeText}</code>` : '';
+            }
+
         case 'ul':
         case 'ol':
             return processList(element, tagName);

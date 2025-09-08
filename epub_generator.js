@@ -388,7 +388,33 @@ pre, code {
     padding: 0.2em 0.4em;
     border-radius: 3px;
     font-size: 0.9em;
+    white-space: pre-wrap;
+    word-wrap: break-word;
 }
+
+pre {
+    padding: 1em;
+    margin: 1em 0;
+    border: 1px solid #ddd;
+    overflow-x: auto;
+}
+
+pre code {
+    background: none;
+    padding: 0;
+    border-radius: 0;
+    font-size: inherit;
+}
+
+/* Syntax highlighting classes */
+.hljs-keyword { color: #007020; font-weight: bold; }
+.hljs-string { color: #4070a0; }
+.hljs-comment { color: #408080; font-style: italic; }
+.hljs-number { color: #208050; }
+.hljs-title { color: #0000ff; }
+.hljs-class { color: #445588; font-weight: bold; }
+.hljs-property { color: #333333; }
+.hljs-variable { color: #19177c; }
 
 ul, ol {
     margin: 1em 0;
