@@ -52,6 +52,7 @@ function createMockDOM(htmlContent = '') {
     dom.window.Image = MockImage;
     global.Image = MockImage;
     global.URL = dom.window.URL;
+    dom.window.console = global.console;
     
     return dom;
 }

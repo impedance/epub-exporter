@@ -22,12 +22,13 @@ test('sanitizeContent returns default message when content empty', () => {
 test('processImages filters out entries without base64 or src', () => {
   const gen = new EPUBGenerator();
   const images = [
-    { base64: 'data:image/png;base64,AAA', src: 'a.png' },
-    { base64: null, src: 'b.png' },
-    { base64: 'data:image/png;base64,BBB', src: null }
+    { base64: 'data:image/png;base64,AAA', src: 'https://example.com/a.png', originalSrc: '/a.png' },
+    { base64: null, src: 'https://example.com/b.png', originalSrc: '/b.png' },
+    { base64: 'data:image/png;base64,BBB', src: null, originalSrc: '/c.png' },
+    { base64: 'data:image/png;base64,DDD', src: 'https://example.com/d.png', originalSrc: '' }
   ];
   assert.deepStrictEqual(gen.processImages(images), [
-    { base64: 'data:image/png;base64,AAA', src: 'a.png' }
+    { base64: 'data:image/png;base64,AAA', src: 'https://example.com/a.png', originalSrc: '/a.png' }
   ]);
 });
 
@@ -41,7 +42,7 @@ test('getImageExtension detects format from base64 prefix', () => {
   const gen = new EPUBGenerator();
   assert.strictEqual(gen.getImageExtension('data:image/png;base64,'), 'png');
   assert.strictEqual(gen.getImageExtension('data:image/webp;base64,'), 'webp');
-  assert.strictEqual(gen.getImageExtension('data:image/unknown;base64,'), 'jpg');
+  assert.strictEqual(gen.getImageExtension('data:image/unknown;base64,'), 'jpeg');
 });
 
 test('escapeXML escapes special characters', () => {
@@ -53,14 +54,15 @@ test('escapeXML escapes special characters', () => {
 
 test('createEPUB embeds images and references them', async () => {
   const gen = new EPUBGenerator();
-  const imgSrc = 'http://example.com/img.png';
+  const rawImgSrc = '//example.com/img.png';
+  const resolvedImgSrc = `https:${rawImgSrc}`;
   const base64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
   let capturedBlob;
   const originalCreate = URL.createObjectURL;
   URL.createObjectURL = (blob) => { capturedBlob = blob; return 'blob:mock'; };
 
-  const content = `<p>Text</p><img src="${imgSrc}"/>`;
-  const images = [{ src: imgSrc, base64 }];
+  const content = `<p>Text</p><img src="${rawImgSrc}"/>`;
+  const images = [{ src: resolvedImgSrc, originalSrc: rawImgSrc, base64 }];
   const result = await gen.createEPUB('Title', content, images);
 
   assert.equal(result.downloadUrl, 'blob:mock');

@@ -2,6 +2,7 @@
 
 export interface ExtractedImage {
   src: string;
+  originalSrc: string;
   base64: string;
   alt: string;
   width: number | string;

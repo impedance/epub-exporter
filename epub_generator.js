@@ -13,6 +13,7 @@ import './jszip.min.js';
 /**
  * @typedef {Object} ImageInput
  * @property {string} src
+ * @property {string} originalSrc
  * @property {string} base64
  * @property {string} [alt]
  * @property {number|string} [width]
@@ -25,6 +26,7 @@ import './jszip.min.js';
  * @property {string} content
  * @property {ImageInput[]} images
  * @property {string} url
+ * @property {string} id
  * @property {string} uuid
  * @property {string} timestamp
  */
@@ -56,12 +58,14 @@ class EPUBGenerator {
             const zip = new JSZip();
             
             // Подготавливаем данные
+            const uniqueId = this.generateUniqueId();
             const bookData = {
                 title: this.sanitizeTitle(title),
                 content: this.sanitizeContent(content),
                 images: this.processImages(images),
                 url: url,
-                uuid: this.generateUniqueId(),
+                uuid: uniqueId,
+                id: uniqueId,
                 timestamp: new Date().toISOString()
             };
 
@@ -209,8 +213,9 @@ class EPUBGenerator {
                 imageManifest.push({
                     id: imageId,
                     filename: filename,
-                    mediaType: `image/${extension}`,
-                    originalSrc: image.src
+                    mediaType: this.getImageMediaType(extension),
+                    originalSrc: image.originalSrc,
+                    resolvedSrc: image.src
                 });
             } catch (error) {
                 const err = /** @type {Error} */ (error);
@@ -252,10 +257,33 @@ class EPUBGenerator {
 
         // Замена ссылок на изображения
         imageManifest.forEach(image => {
-            const imgRegex = new RegExp(`<img[^>]*src=["']${this.escapeRegExp(image.originalSrc)}["'][^>]*>`, 'gi');
-            processedContent = processedContent.replace(imgRegex, 
-                `<img src="images/${image.filename}" alt="" style="max-width: 100%; height: auto;"/>`
-            );
+            const candidates = new Set();
+            const pushCandidate = (value) => {
+                if (value) {
+                    candidates.add(value);
+                }
+            };
+
+            pushCandidate(image.originalSrc);
+            pushCandidate(image.resolvedSrc);
+
+            if (bookData.url) {
+                try {
+                    const absolute = new URL(image.originalSrc, bookData.url).href;
+                    pushCandidate(absolute);
+                    pushCandidate(absolute.replace(/^https?:/, ''));
+                } catch (error) {
+                    // Плохой src не мешает обработке остальных изображений
+                }
+            }
+
+            candidates.forEach(srcCandidate => {
+                const imgRegex = new RegExp(`<img[^>]*src=["']${this.escapeRegExp(srcCandidate)}["'][^>]*>`, 'gi');
+                processedContent = processedContent.replace(
+                    imgRegex,
+                    `<img src="images/${image.filename}" alt="" style="max-width: 100%; height: auto;"/>`
+                );
+            });
         });
 
         return this.templates.chapterXHTML
@@ -451,7 +479,7 @@ li p {
     }
 
     processImages(images) {
-        return images.filter(img => img.base64 && img.src);
+        return images.filter(img => img.base64 && img.src && img.originalSrc);
     }
 
     generateUniqueId() {
@@ -468,7 +496,24 @@ li p {
         if (base64String.includes('data:image/png')) return 'png';
         if (base64String.includes('data:image/gif')) return 'gif';
         if (base64String.includes('data:image/webp')) return 'webp';
-        return 'jpg';
+        if (base64String.includes('data:image/jpeg') || base64String.includes('data:image/jpg')) return 'jpeg';
+        return 'jpeg';
+    }
+
+    getImageMediaType(extension) {
+        switch (extension) {
+            case 'png':
+                return 'image/png';
+            case 'gif':
+                return 'image/gif';
+            case 'webp':
+                return 'image/webp';
+            case 'jpeg':
+            case 'jpg':
+                return 'image/jpeg';
+            default:
+                return 'image/jpeg';
+        }
     }
 
     escapeXML(text) {

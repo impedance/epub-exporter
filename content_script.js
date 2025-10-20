@@ -368,21 +368,31 @@ async function extractImages(container) {
     
     for (let img of imgElements) {
         try {
-            // Пропускаем очень маленькие изображения (вероятно, иконки)
-            if (img.width < 50 || img.height < 50) continue;
+            // AICODE-TRAP: jsdom clones report zero width/height; prefer natural dimensions or attributes to avoid dropping real images [2025-08-14]
+            const attrWidth = parseInt(img.getAttribute('width') || '', 10);
+            const attrHeight = parseInt(img.getAttribute('height') || '', 10);
+            const effectiveWidth = img.naturalWidth || (!Number.isNaN(attrWidth) ? attrWidth : img.width);
+            const effectiveHeight = img.naturalHeight || (!Number.isNaN(attrHeight) ? attrHeight : img.height);
 
-            const src = img.src || img.getAttribute('data-src');
-            if (!src) continue;
+            // Пропускаем иконки только если известные размеры слишком малы
+            if (effectiveWidth && effectiveHeight && (effectiveWidth < 50 || effectiveHeight < 50)) {
+                continue;
+            }
+
+            const rawSrc = img.getAttribute('src') || img.getAttribute('data-src');
+            const src = img.src || rawSrc;
+            if (!src || !rawSrc) continue;
 
             // Конвертируем в base64
             const base64 = await imageToBase64(src);
             if (base64) {
                 images.push({
                     src: src,
+                    originalSrc: rawSrc,
                     base64: base64,
                     alt: img.alt || '',
-                    width: img.width || 'auto',
-                    height: img.height || 'auto'
+                    width: effectiveWidth || 'auto',
+                    height: effectiveHeight || 'auto'
                 });
             }
         } catch (error) {
