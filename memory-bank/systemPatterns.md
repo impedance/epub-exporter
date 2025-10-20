@@ -19,7 +19,7 @@
 5. User downloads generated EPUB
 
 ## Key Patterns
-- Content extraction via DOM analysis
+- Content extraction driven by Selection API clones of highlighted ranges
 - Message passing between extension components
 - EPUB file structure generation
 - Asynchronous processing flow
