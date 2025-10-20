@@ -180,7 +180,7 @@ async function extractTextContentFromElement(container) {
         {
             acceptNode: function(node) {
                 const tagName = node.tagName.toLowerCase();
-                if (['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'blockquote', 'pre', 'code', 'div', 'img'].includes(tagName)) {
+                if (['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'blockquote', 'pre', 'code', 'div', 'img', 'span'].includes(tagName)) {
                     return NodeFilter.FILTER_ACCEPT;
                 }
                 return NodeFilter.FILTER_SKIP;
@@ -294,6 +294,12 @@ function processElement(element) {
             const height = element.getAttribute('height') || element.height;
             // AICODE-TRAP: Preserve original src so EPUB generator can map to downloaded file [2025-08-14]
             return `<img src="${src}" alt="${alt}"${width ? ` width="${width}"` : ''}${height ? ` height="${height}"` : ''}/>`;
+        }
+
+        case 'span': {
+            // AICODE-WHY: Bubble HTML wraps paragraphs in span nodes; treat them as block-level text [2025-10-20]
+            const spanText = cleanText(element.textContent);
+            return spanText ? `<p>${spanText}</p>` : '';
         }
 
         case 'div':

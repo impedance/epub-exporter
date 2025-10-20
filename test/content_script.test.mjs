@@ -138,6 +138,37 @@ test('extractSelectedContent retains image tags', async (t) => {
     assert.ok(result.includes(base64Img));
 });
 
+test('extractSelectedContent captures span-wrapped paragraphs', async (t) => {
+    const bubbleHTML = `
+        <div class="bubble-r-container flex column">
+            <div class="bubble-element Text">
+                <span style="background:transparent">
+                    У резюме есть стандартные блоки, которых важно придерживаться. Некоторые из них иногда можно менять местами, но общая структура обычно выглядит так:&nbsp;
+                </span>
+                <br>
+                <ul>
+                    <li><span>Шапка резюме</span></li>
+                    <li><span>Фотография</span></li>
+                </ul>
+                <div align="justify" style="white-space: pre-line">
+                    Что и где писать?
+                </div>
+            </div>
+        </div>
+    `;
+    const { dom } = createMockSelection(
+        'У резюме есть стандартные блоки, которых важно придерживаться.',
+        bubbleHTML
+    );
+    await loadContentScript(dom);
+
+    const selection = dom.window.getSelection();
+    const result = await dom.window.extractSelectedContent(selection);
+
+    assert.match(result, /<p>У резюме есть стандартные блоки, которых важно придерживаться\./);
+    assert.ok(result.includes('<ul'));
+});
+
 test('extractPageContent throws error when no text is selected', async (t) => {
     const { dom } = createMockSelection(''); // Empty selection
     await loadContentScript(dom);
