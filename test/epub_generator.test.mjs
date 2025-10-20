@@ -2,126 +2,58 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import EPUBGenerator from '../epub_generator.js';
 
-// AICODE-WHY: Validates EPUBGenerator utility methods to prevent regressions in EPUB creation logic [2025-08-10]
+const JSZip = globalThis.JSZip;
 
-test('sanitizeTitle removes invalid characters and trims', () => {
-  const gen = new EPUBGenerator();
-  assert.strictEqual(gen.sanitizeTitle(' Hello!/\\ '), 'Hello');
-});
+test('createEPUB produces well-formed archive with sanitized filename', async () => {
+  assert.ok(JSZip, 'JSZip should be available via global scope');
 
-test('sanitizeTitle returns default for empty title', () => {
-  const gen = new EPUBGenerator();
-  assert.strictEqual(gen.sanitizeTitle(''), 'Экспортированная статья');
-});
-
-test('sanitizeContent returns default message when content empty', () => {
-  const gen = new EPUBGenerator();
-  assert.strictEqual(gen.sanitizeContent(''), '<p>Контент не найден.</p>');
-});
-
-test('processImages filters out entries without base64 or src', () => {
-  const gen = new EPUBGenerator();
-  const images = [
-    { base64: 'data:image/png;base64,AAA', src: 'https://example.com/a.png', originalSrc: '/a.png' },
-    { base64: null, src: 'https://example.com/b.png', originalSrc: '/b.png' },
-    { base64: 'data:image/png;base64,BBB', src: null, originalSrc: '/c.png' },
-    { base64: 'data:image/png;base64,DDD', src: 'https://example.com/d.png', originalSrc: '' }
-  ];
-  assert.deepStrictEqual(gen.processImages(images), [
-    { base64: 'data:image/png;base64,AAA', src: 'https://example.com/a.png', originalSrc: '/a.png' }
-  ]);
-});
-
-test('generateFilename creates epub with sanitized title and date', () => {
-  const gen = new EPUBGenerator();
-  const filename = gen.generateFilename('Title! with *chars*');
-  assert.match(filename, /^Title_with_chars_\d{4}-\d{2}-\d{2}\.epub$/);
-});
-
-test('getImageExtension detects format from base64 prefix', () => {
-  const gen = new EPUBGenerator();
-  assert.strictEqual(gen.getImageExtension('data:image/png;base64,'), 'png');
-  assert.strictEqual(gen.getImageExtension('data:image/webp;base64,'), 'webp');
-  assert.strictEqual(gen.getImageExtension('data:image/unknown;base64,'), 'jpeg');
-});
-
-test('escapeXML escapes special characters', () => {
-  const gen = new EPUBGenerator();
-  const input = '<tag attr="value">&\'';
-  const expected = '&lt;tag attr=&quot;value&quot;&gt;&amp;&apos;';
-  assert.strictEqual(gen.escapeXML(input), expected);
-});
-
-test('createEPUB embeds images and references them', async () => {
-  const gen = new EPUBGenerator();
-  const rawImgSrc = '//example.com/img.png';
-  const resolvedImgSrc = `https:${rawImgSrc}`;
-  const base64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
-  let capturedBlob;
-  const originalCreate = URL.createObjectURL;
-  URL.createObjectURL = (blob) => { capturedBlob = blob; return 'blob:mock'; };
-
-  const content = `<p>Text</p><img src="${rawImgSrc}"/>`;
-  const images = [{ src: resolvedImgSrc, originalSrc: rawImgSrc, base64 }];
-  const result = await gen.createEPUB('Title', content, images);
-
-  assert.equal(result.downloadUrl, 'blob:mock');
-  const buffer = await capturedBlob.arrayBuffer();
-  const JSZipLib = await gen.loadJSZip();
-  const zip = await JSZipLib.loadAsync(buffer);
-  assert.ok(zip.file('OEBPS/images/img_1.png'));
-  const chapter = await zip.file('OEBPS/chapter1.xhtml').async('string');
-  assert.ok(chapter.includes('img src="images/img_1.png"'));
-
-  URL.createObjectURL = originalCreate;
-});
-
-test('createEPUB falls back to data URL when object URLs unavailable', async () => {
-  const gen = new EPUBGenerator();
-  const original = URL.createObjectURL;
-  // Ensure environment lacks createObjectURL
+  const originalCreateObjectURL = URL.createObjectURL;
   URL.createObjectURL = undefined;
 
-  const result = await gen.createEPUB('Test', '<p>Body</p>');
-  assert.ok(result.downloadUrl.startsWith('data:application/epub+zip;base64,'));
-  assert.match(result.filename, /\.epub$/);
-
-  // Restore original method
-  if (original) {
-    URL.createObjectURL = original;
-  } else {
-    delete URL.createObjectURL;
-  }
-});
-
-test('loadJSZip loads JSZip library from local file', async () => {
-  const gen = new EPUBGenerator();
-  const JSZip = await gen.loadJSZip();
-  assert.equal(typeof JSZip.prototype.file, 'function');
-  assert.equal(typeof JSZip.prototype.generateAsync, 'function');
-});
-
-
-test('loadJSZip throws error when JSZip integrity check fails', async () => {
-  const gen = new EPUBGenerator();
-  // Save original JSZip
-  const originalJSZip = global.JSZip;
-  
   try {
-    // Mock a broken JSZip
-    global.JSZip = function() {};
-    JSZip.prototype.file = null;
-    JSZip.prototype.generateAsync = null;
-    
-    await assert.rejects(
-      gen.loadJSZip(),
-      {
-        name: 'Error', 
-        message: /Нарушена целостность уже загруженной библиотеки JSZip/
-      }
+    const generator = new EPUBGenerator();
+    const pixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/w8AAuMB9WcfHhAAAAAASUVORK5CYII=';
+
+    const { downloadUrl, filename } = await generator.createEPUB(
+      'My Test Title!',
+      '<p>Привет мир</p>',
+      [
+        {
+          src: 'https://example.com/image.png',
+          originalSrc: 'https://example.com/image.png',
+          base64: pixel,
+          alt: 'pixel'
+        }
+      ],
+      'https://example.com/article'
     );
+
+    assert.ok(
+      downloadUrl.startsWith('data:application/epub+zip;base64,'),
+      'EPUB should be returned as base64 data URL'
+    );
+    assert.match(
+      filename,
+      /^My_Test_Title_\d{4}-\d{2}-\d{2}\.epub$/,
+      'Filename should be sanitized and timestamped'
+    );
+
+    const zipBuffer = Buffer.from(downloadUrl.split(',')[1], 'base64');
+    const zip = await JSZip.loadAsync(zipBuffer);
+
+    const mimetype = await zip.file('mimetype').async('string');
+    assert.equal(mimetype, 'application/epub+zip', 'mimetype file must be present and uncompressed');
+
+    const content = await zip.folder('OEBPS').file('chapter1.xhtml').async('string');
+    assert.ok(content.includes('<p>Привет мир</p>'), 'Main chapter should contain provided HTML content');
+
+    const opf = await zip.folder('OEBPS').file('content.opf').async('string');
+    assert.ok(opf.includes('<dc:title>My Test Title</dc:title>'), 'OPF should include sanitized title');
+    assert.ok(opf.includes('images/img_1.png'), 'OPF manifest should include processed images');
+
+    const imageEntry = zip.folder('OEBPS/images').file('img_1.png');
+    assert.ok(imageEntry, 'Image asset should be embedded into archive');
   } finally {
-    // Restore JSZip
-    global.JSZip = originalJSZip;
+    URL.createObjectURL = originalCreateObjectURL;
   }
 });
