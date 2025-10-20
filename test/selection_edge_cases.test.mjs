@@ -9,6 +9,39 @@ function createMockDOM(htmlContent = '') {
         pretendToBeVisual: true,
         resources: 'usable'
     });
+
+    const canvasProto = dom.window.HTMLCanvasElement?.prototype;
+    if (canvasProto) {
+        canvasProto.getContext = () => ({
+            drawImage: () => {}
+        });
+        canvasProto.toDataURL = () => 'data:image/png;base64,mocked';
+    }
+
+    class MockImage {
+        constructor() {
+            this.width = 100;
+            this.height = 100;
+            this.naturalWidth = 100;
+            this.naturalHeight = 100;
+            this.onload = null;
+            this.onerror = null;
+            this._src = '';
+        }
+
+        set src(value) {
+            this._src = value;
+            setTimeout(() => {
+                if (typeof this.onload === 'function') {
+                    this.onload();
+                }
+            }, 0);
+        }
+
+        get src() {
+            return this._src;
+        }
+    }
     
     global.window = dom.window;
     global.document = dom.window.document;
@@ -16,7 +49,8 @@ function createMockDOM(htmlContent = '') {
     global.Element = dom.window.Element;
     global.Node = dom.window.Node;
     global.NodeFilter = dom.window.NodeFilter;
-    global.Image = dom.window.Image;
+    dom.window.Image = MockImage;
+    global.Image = MockImage;
     global.URL = dom.window.URL;
     
     return dom;
@@ -41,6 +75,7 @@ async function loadContentScript(dom) {
 }
 
 test('extractPageContent handles null selection', async (t) => {
+    const errorMock = t.mock.method(console, 'error', () => {});
     const dom = createMockDOM('<p>Some content</p>');
     dom.window.getSelection = () => null;
     
@@ -53,9 +88,11 @@ test('extractPageContent handles null selection', async (t) => {
             message: 'Пожалуйста, выделите текст на странице для экспорта'
         }
     );
+    errorMock.mock.restore();
 });
 
 test('extractPageContent handles selection with zero ranges', async (t) => {
+    const errorMock = t.mock.method(console, 'error', () => {});
     const dom = createMockDOM('<p>Some content</p>');
     dom.window.getSelection = () => ({
         rangeCount: 0,
@@ -72,9 +109,11 @@ test('extractPageContent handles selection with zero ranges', async (t) => {
             message: 'Пожалуйста, выделите текст на странице для экспорта'
         }
     );
+    errorMock.mock.restore();
 });
 
 test('extractPageContent handles whitespace-only selection', async (t) => {
+    const errorMock = t.mock.method(console, 'error', () => {});
     const dom = createMockDOM('<p>Some content</p>');
     dom.window.getSelection = () => ({
         rangeCount: 1,
@@ -95,6 +134,7 @@ test('extractPageContent handles whitespace-only selection', async (t) => {
             message: 'Пожалуйста, выделите текст на странице для экспорта'
         }
     );
+    errorMock.mock.restore();
 });
 
 test('extractSelectedContent fallback to plain text when HTML extraction fails', async (t) => {
@@ -154,6 +194,7 @@ test('extractSelectedContent returns empty string for empty fallback text', asyn
 });
 
 test('extractImagesFromSelection handles errors gracefully', async (t) => {
+    const warnMock = t.mock.method(console, 'warn', () => {});
     const dom = createMockDOM('<p>Test content</p>');
     dom.window.getSelection = () => ({
         rangeCount: 1,
@@ -170,6 +211,7 @@ test('extractImagesFromSelection handles errors gracefully', async (t) => {
     
     assert.equal(Array.isArray(result), true);
     assert.equal(result.length, 0);
+    warnMock.mock.restore();
 });
 
 test('processList handles empty list', async (t) => {
@@ -227,6 +269,7 @@ test('processElement handles unsupported element types', async (t) => {
 });
 
 test('extractPageContent throws error when processed content is empty', async (t) => {
+    const errorMock = t.mock.method(console, 'error', () => {});
     const dom = createMockDOM('<p>Test content</p>');
     dom.window.getSelection = () => ({
         rangeCount: 1,
@@ -254,4 +297,5 @@ test('extractPageContent throws error when processed content is empty', async (t
     
     // Restore original function
     dom.window.extractSelectedContent = originalExtractSelectedContent;
+    errorMock.mock.restore();
 });

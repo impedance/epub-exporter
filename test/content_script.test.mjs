@@ -10,13 +10,49 @@ function createMockDOM(htmlContent = '') {
         resources: 'usable'
     });
     
+    // Provide minimal canvas and image support for tests that rely on them
+    const canvasProto = dom.window.HTMLCanvasElement?.prototype;
+    if (canvasProto) {
+        canvasProto.getContext = () => ({
+            drawImage: () => {}
+        });
+        canvasProto.toDataURL = () => 'data:image/png;base64,mocked';
+    }
+
+    class MockImage {
+        constructor() {
+            this.width = 100;
+            this.height = 100;
+            this.naturalWidth = 100;
+            this.naturalHeight = 100;
+            this.onload = null;
+            this.onerror = null;
+            this._src = '';
+        }
+
+        set src(value) {
+            this._src = value;
+            // Simulate async load behaviour
+            setTimeout(() => {
+                if (typeof this.onload === 'function') {
+                    this.onload();
+                }
+            }, 0);
+        }
+
+        get src() {
+            return this._src;
+        }
+    }
+    
     global.window = dom.window;
     global.document = dom.window.document;
     global.HTMLElement = dom.window.HTMLElement;
     global.Element = dom.window.Element;
     global.Node = dom.window.Node;
     global.NodeFilter = dom.window.NodeFilter;
-    global.Image = dom.window.Image;
+    dom.window.Image = MockImage;
+    global.Image = MockImage;
     global.URL = dom.window.URL;
     
     return dom;
@@ -170,6 +206,7 @@ test('extractSelectedContent captures span-wrapped paragraphs', async (t) => {
 });
 
 test('extractPageContent throws error when no text is selected', async (t) => {
+    const errorMock = t.mock.method(console, 'error', () => {});
     const { dom } = createMockSelection(''); // Empty selection
     await loadContentScript(dom);
     
@@ -180,6 +217,7 @@ test('extractPageContent throws error when no text is selected', async (t) => {
             message: 'Пожалуйста, выделите текст на странице для экспорта'
         }
     );
+    errorMock.mock.restore();
 });
 
 test('extractPageContent returns complete content object', async (t) => {
