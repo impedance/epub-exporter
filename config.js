@@ -17,6 +17,14 @@ if (typeof window !== 'undefined') {
     window.DROPBOX_CONFIG = DROPBOX_CONFIG;
 }
 
+const globalTarget = typeof globalThis !== 'undefined'
+    ? globalThis
+    : (typeof self !== 'undefined' ? self : undefined);
+
+if (globalTarget && !globalTarget.DROPBOX_CONFIG) {
+    globalTarget.DROPBOX_CONFIG = DROPBOX_CONFIG;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = DROPBOX_CONFIG;
 }

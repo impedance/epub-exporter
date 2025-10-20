@@ -10,6 +10,7 @@
   ],
   "host_permissions": [
     "https://api.dropboxapi.com/*",
+    "https://content.dropboxapi.com/*",
     "https://www.dropbox.com/*"
   ],
   "action": {

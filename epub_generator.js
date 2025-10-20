@@ -66,7 +66,7 @@ class EPUBGenerator {
      * @param {string} content
      * @param {ImageInput[]} [images=[]]
      * @param {string} [url='']
-     * @returns {Promise<{downloadUrl: string, filename: string}>}
+     * @returns {Promise<{downloadUrl: string, filename: string, blob: Blob}>}
      */
     async createEPUB(title, content, images = [], url = '') {
         try {
@@ -118,7 +118,8 @@ class EPUBGenerator {
 
             return {
                 downloadUrl,
-                filename: this.generateFilename(bookData.title)
+                filename: this.generateFilename(bookData.title),
+                blob: epubBlob
             };
 
         } catch (error) {

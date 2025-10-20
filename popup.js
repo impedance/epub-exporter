@@ -151,7 +151,8 @@ document.addEventListener('DOMContentLoaded', function() {
             
             const epubResponse = await chrome.runtime.sendMessage({
                 action: 'createEPUB',
-                data: response.data
+                data: response.data,
+                uploadToDropbox: shouldUploadToDropbox
             });
             
             if (!epubResponse || !epubResponse.success) {
@@ -164,20 +165,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     { text: 'Инициализация', completed: true },
                     { text: 'Извлечение контента', completed: true },
                     { text: 'Создание EPUB файла', completed: true },
-                    { text: 'Загрузка в Dropbox...', active: true }
-                ]);
-                setProgress(75);
-                
-                await uploadToDropbox(epubResponse.downloadUrl, epubResponse.filename);
-                
-                setMultiStepStatus([
-                    { text: 'Инициализация', completed: true },
-                    { text: 'Извлечение контента', completed: true },
-                    { text: 'Создание EPUB файла', completed: true },
                     { text: 'Загрузка в Dropbox', completed: true }
                 ]);
                 setProgress(95);
             } else {
+                setMultiStepStatus([
+                    { text: 'Инициализация', completed: true },
+                    { text: 'Извлечение контента', completed: true },
+                    { text: 'Создание EPUB файла', completed: true }
+                ]);
                 setProgress(85);
             }
             
@@ -190,7 +186,7 @@ document.addEventListener('DOMContentLoaded', function() {
             setProgress(100);
             
             const successMessage = shouldUploadToDropbox ? 
-                '✅ EPUB создан и загружен в Dropbox!' : 
+                `✅ EPUB создан и загружен в Dropbox${epubResponse.dropboxPath ? ` (${epubResponse.dropboxPath})` : ''}!` : 
                 '✅ EPUB файл успешно создан!';
             
             setStatus(successMessage, 'success');
@@ -205,27 +201,6 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Ошибка экспорта:', err);
             setStatus(`❌ ${err.message}`, 'error');
             setProgress(0);
-        }
-    }
-
-    /**
-     * Загружает файл в Dropbox
-     * @param {string} downloadUrl - URL для скачивания файла
-     * @param {string} filename - Имя файла
-     */
-    async function uploadToDropbox(downloadUrl, filename) {
-        try {
-            // Преобразуем URL в Blob
-            const response = await fetch(downloadUrl);
-            const blob = await response.blob();
-            
-            // Загружаем в Dropbox
-            const dropboxPath = await dropboxClient.uploadFile(blob, filename);
-            console.log('File uploaded to Dropbox:', dropboxPath);
-            
-        } catch (error) {
-            console.error('Dropbox upload failed:', error);
-            throw new Error(`Ошибка загрузки в Dropbox: ${error.message}`);
         }
     }
 

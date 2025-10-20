@@ -1,8 +1,18 @@
 // @ts-check
-/* global chrome, DROPBOX_CONFIG */
+/* global chrome */
 // Simplified Dropbox client for single-user Chrome Extension
 // AICODE-WHY: No OAuth needed for single user - use hardcoded refresh token like tg2book [2025-08-12]
 // AICODE-LINK: ./config.js#DROPBOX_CONFIG
+
+const CONFIG = (() => {
+    if (typeof DROPBOX_CONFIG !== 'undefined') {
+        return DROPBOX_CONFIG;
+    }
+    if (typeof globalThis !== 'undefined' && globalThis.DROPBOX_CONFIG) {
+        return globalThis.DROPBOX_CONFIG;
+    }
+    throw new Error('DROPBOX_CONFIG is not defined. Ensure config.js is loaded before dropbox_client.js');
+})();
 
 class DropboxClient {
     constructor() {
@@ -34,10 +44,10 @@ class DropboxClient {
         
         const formData = new URLSearchParams({
             grant_type: 'refresh_token',
-            refresh_token: DROPBOX_CONFIG.REFRESH_TOKEN
+            refresh_token: CONFIG.REFRESH_TOKEN
         });
 
-        const auth = btoa(`${DROPBOX_CONFIG.APP_KEY}:${DROPBOX_CONFIG.APP_SECRET}`);
+        const auth = btoa(`${CONFIG.APP_KEY}:${CONFIG.APP_SECRET}`);
         
         const response = await fetch(url, {
             method: 'POST',
@@ -64,10 +74,10 @@ class DropboxClient {
      * @returns {boolean}
      */
     isConfigured() {
-        return !!(DROPBOX_CONFIG.APP_KEY &&
-                  DROPBOX_CONFIG.APP_SECRET &&
-                  DROPBOX_CONFIG.REFRESH_TOKEN &&
-                  DROPBOX_CONFIG.APP_KEY !== 'your_dropbox_app_key_here');
+        return !!(CONFIG.APP_KEY &&
+                  CONFIG.APP_SECRET &&
+                  CONFIG.REFRESH_TOKEN &&
+                  CONFIG.APP_KEY !== 'your_dropbox_app_key_here');
     }
 
     /**
@@ -101,7 +111,7 @@ class DropboxClient {
 
         try {
             const accessToken = await this.getAccessToken();
-            const path = `${DROPBOX_CONFIG.TARGET_FOLDER}/${filename}`;
+            const path = `${CONFIG.TARGET_FOLDER}/${filename}`;
             
             // Конвертируем Blob в ArrayBuffer
             const arrayBuffer = await fileBlob.arrayBuffer();
