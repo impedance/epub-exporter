@@ -293,7 +293,7 @@ function processElement(element) {
             const width = element.getAttribute('width') || element.width;
             const height = element.getAttribute('height') || element.height;
             // AICODE-TRAP: Preserve original src so EPUB generator can map to downloaded file [2025-08-14]
-            return `<img src="${src}" alt="${alt}"${width ? ` width="${width}"` : ''}${height ? ` height="${height}"` : ''}/>`;
+            return `<img src="${src}" alt="${alt}"${width ? ` width="${width}` : ''}${width ? '"' : ''}${height ? ` height="${height}` : ''}${height ? '"' : ''}/>`;
         }
 
         case 'span': {

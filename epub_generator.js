@@ -4,6 +4,22 @@
 // Этот модуль предоставляет дополнительные функции
 /* AICODE-WHY: Typed EPUB generation ensures predictable EPUB structure and catch integration issues early [2025-08-13] */
 import './jszip.min.js';
+// AICODE-LINK: ./epub/assets.js
+// AICODE-LINK: ./epub/templates/index.js
+import {
+    getMimetypeTemplate,
+    getContainerTemplate,
+    getContentOpfTemplate,
+    getTocNcxTemplate,
+    getChapterXhtmlTemplate,
+    getStylesTemplate
+} from './epub/templates/index.js';
+import {
+    sanitizeImageInputs,
+    getImageExtension,
+    getImageMediaType,
+    decodeBase64Image
+} from './epub/assets.js';
 
 /**
  * @typedef {typeof JSZip} JSZipConstructor
@@ -34,12 +50,12 @@ import './jszip.min.js';
 class EPUBGenerator {
     constructor() {
         this.templates = {
-            mimetype: 'application/epub+zip',
-            containerXML: this.getContainerTemplate(),
-            contentOPF: this.getContentOPFTemplate(),
-            tocNCX: this.getTocNCXTemplate(),
-            chapterXHTML: this.getChapterXHTMLTemplate(),
-            styles: this.getStylesTemplate()
+            mimetype: getMimetypeTemplate(),
+            containerXML: getContainerTemplate(),
+            contentOPF: getContentOpfTemplate(),
+            tocNCX: getTocNcxTemplate(),
+            chapterXHTML: getChapterXhtmlTemplate(),
+            styles: getStylesTemplate()
         };
     }
 
@@ -62,7 +78,7 @@ class EPUBGenerator {
             const bookData = {
                 title: this.sanitizeTitle(title),
                 content: this.sanitizeContent(content),
-                images: this.processImages(images),
+                images: sanitizeImageInputs(images),
                 url: url,
                 uuid: uniqueId,
                 id: uniqueId,
@@ -196,24 +212,15 @@ class EPUBGenerator {
             const image = images[i];
             try {
                 const imageId = `img_${i + 1}`;
-                const extension = this.getImageExtension(image.base64);
+                const extension = getImageExtension(image.base64);
                 const filename = `${imageId}.${extension}`;
-
-                // Конвертация base64 в binary
-                const base64Data = image.base64.split(',')[1];
-                const binaryData = atob(base64Data);
-                const bytes = new Uint8Array(binaryData.length);
-                
-                for (let j = 0; j < binaryData.length; j++) {
-                    bytes[j] = binaryData.charCodeAt(j);
-                }
-
+                const bytes = decodeBase64Image(image.base64);
                 imageFolder.file(filename, bytes);
                 
                 imageManifest.push({
                     id: imageId,
                     filename: filename,
-                    mediaType: this.getImageMediaType(extension),
+                    mediaType: getImageMediaType(extension),
                     originalSrc: image.originalSrc,
                     resolvedSrc: image.src
                 });
@@ -291,184 +298,6 @@ class EPUBGenerator {
             .replace('{{CONTENT}}', processedContent);
     }
 
-    // Шаблоны
-    getContainerTemplate() {
-        return `<?xml version="1.0" encoding="UTF-8"?>
-<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
-    <rootfiles>
-        <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
-    </rootfiles>
-</container>`;
-    }
-
-    getContentOPFTemplate() {
-        return `<?xml version="1.0" encoding="UTF-8"?>
-<package version="2.0" xmlns="http://www.idpf.org/2007/opf" unique-identifier="BookId">
-    <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">
-        <dc:identifier id="BookId">{{BOOK_ID}}</dc:identifier>
-        <dc:title>{{TITLE}}</dc:title>
-        <dc:creator>EPUB Экспортер</dc:creator>
-        <dc:language>ru</dc:language>
-        <dc:date>{{TIMESTAMP}}</dc:date>
-        <meta name="cover" content="cover"/>
-    </metadata>
-    <manifest>{{MANIFEST}}
-    </manifest>
-    <spine toc="ncx">
-        <itemref idref="chapter1"/>
-    </spine>
-</package>`;
-    }
-
-    getTocNCXTemplate() {
-        return `<?xml version="1.0" encoding="UTF-8"?>
-<ncx version="2005-1" xmlns="http://www.daisy.org/z3986/2005/ncx/">
-    <head>
-        <meta name="dtb:uid" content="{{BOOK_ID}}"/>
-        <meta name="dtb:depth" content="1"/>
-        <meta name="dtb:totalPageCount" content="0"/>
-        <meta name="dtb:maxPageNumber" content="0"/>
-    </head>
-    <docTitle>
-        <text>{{TITLE}}</text>
-    </docTitle>
-    <navMap>
-        <navPoint id="navpoint-1" playOrder="1">
-            <navLabel>
-                <text>{{TITLE}}</text>
-            </navLabel>
-            <content src="chapter1.xhtml"/>
-        </navPoint>
-    </navMap>
-</ncx>`;
-    }
-
-    getChapterXHTMLTemplate() {
-        return `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml">
-<head>
-    <title>{{TITLE}}</title>
-    <link rel="stylesheet" type="text/css" href="styles.css"/>
-</head>
-<body>
-    <h1>{{TITLE}}</h1>
-    {{CONTENT}}
-</body>
-</html>`;
-    }
-
-    getStylesTemplate() {
-        return `/* Стили для PocketBook EPUB */
-body {
-    font-family: "Times New Roman", Times, serif;
-    font-size: 1em;
-    line-height: 1.6;
-    margin: 1em;
-    text-align: justify;
-    color: #000;
-    background: #fff;
-}
-
-h1, h2, h3, h4, h5, h6 {
-    font-family: Arial, sans-serif;
-    margin: 1.5em 0 0.5em 0;
-    page-break-after: avoid;
-    color: #333;
-}
-
-h1 {
-    font-size: 1.8em;
-    text-align: center;
-    border-bottom: 2px solid #ccc;
-    padding-bottom: 0.5em;
-}
-
-h2 { font-size: 1.5em; }
-h3 { font-size: 1.3em; }
-
-p {
-    margin: 0.8em 0;
-    text-indent: 1.2em;
-    orphans: 2;
-    widows: 2;
-}
-
-blockquote {
-    margin: 1em 2em;
-    padding: 0.5em 1em;
-    border-left: 3px solid #ccc;
-    font-style: italic;
-    background: #f9f9f9;
-}
-
-img {
-    max-width: 100%;
-    height: auto;
-    display: block;
-    margin: 1em auto;
-    page-break-inside: avoid;
-}
-
-pre, code {
-    font-family: "Courier New", monospace;
-    background: #f5f5f5;
-    padding: 0.2em 0.4em;
-    border-radius: 3px;
-    font-size: 0.9em;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-}
-
-pre {
-    padding: 1em;
-    margin: 1em 0;
-    border: 1px solid #ddd;
-    overflow-x: auto;
-}
-
-pre code {
-    background: none;
-    padding: 0;
-    border-radius: 0;
-    font-size: inherit;
-}
-
-/* Syntax highlighting classes */
-.hljs-keyword { color: #007020; font-weight: bold; }
-.hljs-string { color: #4070a0; }
-.hljs-comment { color: #408080; font-style: italic; }
-.hljs-number { color: #208050; }
-.hljs-title { color: #0000ff; }
-.hljs-class { color: #445588; font-weight: bold; }
-.hljs-property { color: #333333; }
-.hljs-variable { color: #19177c; }
-
-ul, ol {
-    margin: 1em 0;
-    padding-left: 1.5em;
-}
-
-ul {
-    list-style-type: disc;
-}
-
-ol {
-    list-style-type: decimal;
-}
-
-li {
-    margin: 0.5em 0;
-    padding-left: 0.2em;
-    line-height: 1.4;
-}
-
-li p {
-    margin: 0.2em 0;
-    text-indent: 0;
-}`;
-    }
-
     // Утилиты
     sanitizeTitle(title) {
         return title.trim().replace(/[^\w\s-]/g, '').substring(0, 100) || 'Экспортированная статья';
@@ -476,10 +305,6 @@ li p {
 
     sanitizeContent(content) {
         return content.trim() || '<p>Контент не найден.</p>';
-    }
-
-    processImages(images) {
-        return images.filter(img => img.base64 && img.src && img.originalSrc);
     }
 
     generateUniqueId() {
@@ -490,30 +315,6 @@ li p {
         const cleanTitle = title.replace(/[^\w\s-]/g, '').replace(/\s+/g, '_').substring(0, 50);
         const timestamp = new Date().toISOString().slice(0, 10);
         return `${cleanTitle}_${timestamp}.epub`;
-    }
-
-    getImageExtension(base64String) {
-        if (base64String.includes('data:image/png')) return 'png';
-        if (base64String.includes('data:image/gif')) return 'gif';
-        if (base64String.includes('data:image/webp')) return 'webp';
-        if (base64String.includes('data:image/jpeg') || base64String.includes('data:image/jpg')) return 'jpeg';
-        return 'jpeg';
-    }
-
-    getImageMediaType(extension) {
-        switch (extension) {
-            case 'png':
-                return 'image/png';
-            case 'gif':
-                return 'image/gif';
-            case 'webp':
-                return 'image/webp';
-            case 'jpeg':
-            case 'jpg':
-                return 'image/jpeg';
-            default:
-                return 'image/jpeg';
-        }
     }
 
     escapeXML(text) {
