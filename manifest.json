@@ -9,6 +9,7 @@
     "scripting"
   ],
   "host_permissions": [
+    "<all_urls>",
     "https://api.dropboxapi.com/*",
     "https://content.dropboxapi.com/*",
     "https://www.dropbox.com/*"

@@ -384,7 +384,7 @@ async function extractImages(container) {
             if (!src || !rawSrc) continue;
 
             // Конвертируем в base64
-            const base64 = await imageToBase64(src);
+            const base64 = await imageToBase64(rawSrc, src);
             if (base64) {
                 images.push({
                     src: src,
@@ -404,12 +404,131 @@ async function extractImages(container) {
     return images;
 }
 
+// AICODE-TRAP: CDN images without CORS taint canvas; use fetch fallback first [2025-10-21]
 /**
- * Конвертирует изображение в base64.
- * @param {string} src
+ * Конвертирует изображение в base64 с учетом CORS ограничений.
+ * @param {string} rawSrc
+ * @param {string} resolvedSrc
  * @returns {Promise<string|null>}
  */
-function imageToBase64(src) {
+async function imageToBase64(rawSrc, resolvedSrc) {
+    if (!rawSrc && !resolvedSrc) {
+        return null;
+    }
+
+    if ((rawSrc && rawSrc.startsWith('data:')) || (resolvedSrc && resolvedSrc.startsWith('data:'))) {
+        return resolvedSrc || rawSrc;
+    }
+
+    const candidates = new Set();
+    if (resolvedSrc) {
+        candidates.add(resolvedSrc);
+    }
+
+    if (rawSrc && rawSrc !== resolvedSrc) {
+        try {
+            candidates.add(new URL(rawSrc, window.location.href).href);
+        } catch (error) {
+            // Игнорируем некорректные URI
+        }
+    }
+
+    for (const candidate of candidates) {
+        const dataUrl = await fetchImageWithFallback(candidate);
+        if (dataUrl) {
+            return dataUrl;
+        }
+    }
+
+    return await convertImageWithCanvas(resolvedSrc || rawSrc);
+}
+
+/**
+ * Пытается загрузить изображение напрямую, затем через background fallback.
+ * @param {string} url
+ * @returns {Promise<string|null>}
+ */
+async function fetchImageWithFallback(url) {
+    if (!url) {
+        return null;
+    }
+
+    const directResult = await fetchImageDirect(url);
+    if (directResult) {
+        return directResult;
+    }
+
+    if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+        try {
+            const response = await chrome.runtime.sendMessage({
+                action: 'fetchImageAsDataURL',
+                url
+            });
+            if (response?.success && response.dataUrl) {
+                return response.dataUrl;
+            }
+        } catch (error) {
+            const err = /** @type {Error} */ (error);
+            console.warn('Background fetch failed:', err.message);
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Получает изображение через fetch внутри content script.
+ * @param {string} url
+ * @returns {Promise<string|null>}
+ */
+async function fetchImageDirect(url) {
+    try {
+        const response = await fetch(url, {
+            mode: 'cors',
+            credentials: 'omit',
+            cache: 'force-cache'
+        });
+
+        if (!response.ok) {
+            return null;
+        }
+
+        const blob = await response.blob();
+        if (!blob.type.startsWith('image/')) {
+            return null;
+        }
+
+        const dataUrl = await blobToDataURL(blob);
+        return dataUrl || null;
+    } catch (error) {
+        return null;
+    }
+}
+
+/**
+ * Конвертирует Blob в data URL.
+ * @param {Blob} blob
+ * @returns {Promise<string>}
+ */
+function blobToDataURL(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(blob);
+    });
+}
+
+/**
+ * Последняя попытка: конвертируем изображение через canvas.
+ * @param {string} url
+ * @returns {Promise<string|null>}
+ */
+function convertImageWithCanvas(url) {
+    if (!url) {
+        return Promise.resolve(null);
+    }
+
     return new Promise((resolve) => {
         try {
             const img = new Image();
@@ -440,10 +559,8 @@ function imageToBase64(src) {
                 resolve(null);
             };
 
-            img.src = src;
+            img.src = url;
         } catch (error) {
-            const err = /** @type {Error} */ (error);
-            console.warn('Ошибка загрузки изображения:', err);
             resolve(null);
         }
     });

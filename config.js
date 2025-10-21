@@ -4,9 +4,9 @@
 
 const DROPBOX_CONFIG = {
     // Ваши Dropbox credentials (заполните из .env файла tg2book)
-    APP_KEY: 'your_dropbox_app_key_here',
-    APP_SECRET: 'your_dropbox_app_secret_here', 
-    REFRESH_TOKEN: 'your_dropbox_refresh_token_here',
+    APP_KEY: 'chq0zbrl1wc94ba',
+    APP_SECRET: 'h90t09nnyx8k6we',
+    REFRESH_TOKEN:'R7vPsptOl-wAAAAAAAAAAWW6kg9rOL81frv1EiZj_wGnhV36sPqD3X8-TNK6Jqpy',
     
     // Папка назначения в Dropbox
     TARGET_FOLDER: '/Apps/EPUB Exporter'
