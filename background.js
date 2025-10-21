@@ -39,7 +39,7 @@ async function createEPUBFile(data, options = {}) {
     try {
         const generator = new EPUBGenerator();
         const { title, content, images, url } = data;
-        const preparedImages = await prepareImages(images, url);
+        const preparedImages = await prepareImages(images, url, content);
         const result = await generator.createEPUB(title, content, preparedImages, url);
 
         let dropboxPath;
@@ -74,67 +74,108 @@ async function fetchImageAsDataURL(url) {
     return await fetchImageViaXHR(url);
 }
 
+// AICODE-WHY: HTML fallback parsing fetches remote <img> assets even when selection metadata misses them [2025-10-22]
 // AICODE-WHY: Background normalizes missing image blobs so EPUB packs remote assets even when content script hits CORS walls [2025-10-22]
 /**
  * Ensures every image has an embeddable data URL, fetching in the background if needed.
  * @param {ExtractedImage[]} [images=[]]
  * @param {string} [pageUrl]
+ * @param {string} [htmlContent]
  * @returns {Promise<ExtractedImage[]>}
  */
-async function prepareImages(images = [], pageUrl = '') {
+async function prepareImages(images = [], pageUrl = '', htmlContent = '') {
     if (!Array.isArray(images) || images.length === 0) {
-        return [];
+        images = [];
     }
 
     const prepared = [];
+    const seen = new Set();
+
+    const queue = [];
     for (const image of images) {
         if (!image) {
             continue;
         }
+        queue.push({
+            originalSrc: image.originalSrc || image.src || '',
+            resolvedSrc: image.src || '',
+            alt: image.alt || '',
+            width: image.width ?? 'auto',
+            height: image.height ?? 'auto',
+            base64: typeof image.base64 === 'string' ? image.base64 : ''
+        });
+    }
 
-        if (typeof image.base64 === 'string' && image.base64.startsWith('data:')) {
-            prepared.push(image);
+    const htmlCandidates = extractImageCandidatesFromHtml(htmlContent, pageUrl);
+    for (const candidate of htmlCandidates) {
+        queue.push(candidate);
+    }
+
+    for (const candidate of queue) {
+        const key = makeImageKey(candidate.originalSrc, candidate.resolvedSrc, pageUrl);
+        if (!key || seen.has(key)) {
             continue;
         }
 
-        const candidates = new Set();
-        if (image.src) {
-            candidates.add(image.src);
-        }
-        if (image.originalSrc) {
-            candidates.add(image.originalSrc);
-        }
+        let base64Data = candidate.base64 && candidate.base64.startsWith('data:')
+            ? candidate.base64
+            : null;
 
-        let base64Data = null;
-        const tried = new Set();
-        for (const candidate of candidates) {
-            const normalized = normalizeImageUrl(candidate, pageUrl);
-            if (!normalized) {
-                continue;
+        if (!base64Data) {
+            const candidates = new Set();
+            if (candidate.resolvedSrc) {
+                candidates.add(candidate.resolvedSrc);
             }
-            if (tried.has(normalized)) {
-                continue;
+            if (candidate.originalSrc) {
+                candidates.add(candidate.originalSrc);
             }
-            tried.add(normalized);
-            if (normalized.startsWith('data:')) {
-                base64Data = normalized;
-                break;
-            }
-            try {
-                base64Data = await fetchImageAsDataURL(normalized);
-                if (base64Data) {
+
+            const tried = new Set();
+            for (const srcCandidate of candidates) {
+                const normalized = normalizeImageUrl(srcCandidate, pageUrl);
+                if (!normalized || tried.has(normalized)) {
+                    continue;
+                }
+                tried.add(normalized);
+
+                if (normalized.startsWith('data:')) {
+                    base64Data = normalized;
                     break;
                 }
-            } catch (error) {
-                console.warn('Не удалось загрузить изображение в фоне:', normalized, error);
+
+                try {
+                    base64Data = await fetchImageAsDataURL(normalized);
+                    if (base64Data) {
+                        break;
+                    }
+                } catch (error) {
+                    console.warn('Не удалось загрузить изображение в фоне:', normalized, error);
+                }
             }
         }
 
-        if (base64Data) {
-            prepared.push({ ...image, base64: base64Data });
-        } else {
-            console.warn('Пропускаем изображение без данных:', image.originalSrc || image.src);
+        if (!base64Data) {
+            continue;
         }
+
+        const normalizedSrc = normalizeImageUrl(candidate.resolvedSrc || candidate.originalSrc, pageUrl)
+            || candidate.resolvedSrc
+            || candidate.originalSrc;
+
+        if (!normalizedSrc) {
+            continue;
+        }
+
+        prepared.push({
+            src: normalizedSrc,
+            originalSrc: candidate.originalSrc || candidate.resolvedSrc || normalizedSrc,
+            base64: base64Data,
+            alt: candidate.alt || '',
+            width: candidate.width ?? 'auto',
+            height: candidate.height ?? 'auto'
+        });
+
+        seen.add(key);
     }
 
     return prepared;
@@ -172,6 +213,94 @@ function normalizeImageUrl(candidate, pageUrl) {
         }
     }
     return null;
+}
+
+/**
+ * Creates a stable key for deduplicating image candidates.
+ * @param {string} originalSrc
+ * @param {string} resolvedSrc
+ * @param {string} pageUrl
+ * @returns {string}
+ */
+function makeImageKey(originalSrc, resolvedSrc, pageUrl) {
+    const normalizedResolved = normalizeImageUrl(resolvedSrc, pageUrl);
+    if (normalizedResolved) {
+        return normalizedResolved;
+    }
+    const normalizedOriginal = normalizeImageUrl(originalSrc, pageUrl);
+    if (normalizedOriginal) {
+        return normalizedOriginal;
+    }
+    const fallback = resolvedSrc || originalSrc || '';
+    return fallback.trim().toLowerCase();
+}
+
+/**
+ * Extracts <img> candidates from raw HTML content.
+ * @param {string} html
+ * @param {string} pageUrl
+ * @returns {Array<{originalSrc: string, resolvedSrc: string, alt: string, width: number|string, height: number|string, base64?: string}>}
+ */
+function extractImageCandidatesFromHtml(html, pageUrl) {
+    if (typeof html !== 'string' || html.trim() === '') {
+        return [];
+    }
+
+    const candidates = [];
+
+    if (typeof DOMParser !== 'undefined') {
+        try {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const imgs = doc.querySelectorAll('img');
+            imgs.forEach(img => {
+                const srcAttr = img.getAttribute('src') || img.getAttribute('data-src') || '';
+                if (!srcAttr) {
+                    return;
+                }
+                const resolved = normalizeImageUrl(srcAttr, pageUrl) || srcAttr;
+                candidates.push({
+                    originalSrc: srcAttr,
+                    resolvedSrc: resolved,
+                    alt: img.getAttribute('alt') || '',
+                    width: img.getAttribute('width') || 'auto',
+                    height: img.getAttribute('height') || 'auto'
+                });
+            });
+            if (candidates.length > 0) {
+                return candidates;
+            }
+        } catch (error) {
+            console.warn('DOMParser не смог разобрать HTML, используем резервный парсер:', error);
+        }
+    }
+
+    const regex = /<img\b[^>]*>/gi;
+    let match;
+    while ((match = regex.exec(html)) !== null) {
+        const tag = match[0];
+        const srcMatch = tag.match(/\s(?:src|data-src)=["']([^"']+)["']/i);
+        if (!srcMatch) {
+            continue;
+        }
+        const attr = srcMatch[1].trim();
+        if (!attr) {
+            continue;
+        }
+        const resolved = normalizeImageUrl(attr, pageUrl) || attr;
+        const altMatch = tag.match(/\salt=["']([^"']*)["']/i);
+        const widthMatch = tag.match(/\swidth=["']([^"']*)["']/i);
+        const heightMatch = tag.match(/\sheight=["']([^"']*)["']/i);
+        candidates.push({
+            originalSrc: attr,
+            resolvedSrc: resolved,
+            alt: altMatch ? altMatch[1] : '',
+            width: widthMatch ? widthMatch[1] : 'auto',
+            height: heightMatch ? heightMatch[1] : 'auto'
+        });
+    }
+
+    return candidates;
 }
 
 // AICODE-TRAP: CDN responses may block Fetch API despite host permissions; fall back to XHR which still works in MV3 background [2025-10-22]
@@ -256,3 +385,5 @@ function arrayBufferToBase64(buffer) {
 
     return btoa(binary);
 }
+
+export { prepareImages, extractImageCandidatesFromHtml };
