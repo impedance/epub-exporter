@@ -2,22 +2,19 @@
 /* global chrome */
 // Simplified Dropbox client for single-user Chrome Extension
 // AICODE-WHY: No OAuth needed for single user - use hardcoded refresh token like tg2book [2025-08-12]
-// AICODE-LINK: ./config.js#DROPBOX_CONFIG
+// AICODE-LINK: ./config.js#loadDropboxConfig
 
-const CONFIG = (() => {
-    if (typeof DROPBOX_CONFIG !== 'undefined') {
-        return DROPBOX_CONFIG;
-    }
-    if (typeof globalThis !== 'undefined' && globalThis.DROPBOX_CONFIG) {
-        return globalThis.DROPBOX_CONFIG;
-    }
-    throw new Error('DROPBOX_CONFIG is not defined. Ensure config.js is loaded before dropbox_client.js');
-})();
+import { loadDropboxConfig } from './config.js';
+
+const LOG_PREFIX = '[dropbox]';
 
 class DropboxClient {
     constructor() {
         this.accessToken = null;
         this.tokenExpiresAt = null;
+        this.configPromise = null;
+        this.cachedConfig = null;
+        console.debug(`${LOG_PREFIX} client initialized`);
     }
 
     /**
@@ -25,13 +22,20 @@ class DropboxClient {
      * @returns {Promise<string>}
      */
     async getAccessToken() {
+        const config = await this.ensureConfigured();
+
         // Если токен есть и не истек - возвращаем его
         if (this.accessToken && this.tokenExpiresAt && Date.now() < this.tokenExpiresAt) {
+            console.debug(`${LOG_PREFIX} reuse cached access token (valid until ${new Date(this.tokenExpiresAt).toISOString()})`);
             return this.accessToken;
         }
 
+        console.debug(`${LOG_PREFIX} refreshing access token`);
         // Обновляем токен
-        await this.refreshAccessToken();
+        await this.refreshAccessToken(config);
+        if (this.tokenExpiresAt) {
+            console.debug(`${LOG_PREFIX} new token valid until ${new Date(this.tokenExpiresAt).toISOString()}`);
+        }
         return this.accessToken;
     }
 
@@ -39,15 +43,16 @@ class DropboxClient {
      * Обновляет access token используя refresh token
      * @returns {Promise<void>}
      */
-    async refreshAccessToken() {
+    async refreshAccessToken(config) {
         const url = 'https://api.dropbox.com/oauth2/token';
+        console.debug(`${LOG_PREFIX} requesting token via ${url}`);
         
         const formData = new URLSearchParams({
             grant_type: 'refresh_token',
-            refresh_token: CONFIG.REFRESH_TOKEN
+            refresh_token: config.REFRESH_TOKEN
         });
 
-        const auth = btoa(`${CONFIG.APP_KEY}:${CONFIG.APP_SECRET}`);
+        const auth = btoa(`${config.APP_KEY}:${config.APP_SECRET}`);
         
         const response = await fetch(url, {
             method: 'POST',
@@ -59,6 +64,8 @@ class DropboxClient {
         });
 
         if (!response.ok) {
+            const errorText = await response.text().catch(() => '');
+            console.error(`${LOG_PREFIX} token refresh failed`, response.status, response.statusText, errorText);
             throw new Error(`Failed to refresh token: ${response.status} ${response.statusText}`);
         }
 
@@ -66,18 +73,20 @@ class DropboxClient {
         this.accessToken = data.access_token;
         this.tokenExpiresAt = Date.now() + (data.expires_in * 1000);
         
-        console.log('Dropbox access token refreshed');
+        console.debug(`${LOG_PREFIX} access token refreshed successfully`);
     }
 
     /**
      * Проверяет, настроен ли Dropbox (есть ли все необходимые ключи)
      * @returns {boolean}
      */
-    isConfigured() {
-        return !!(CONFIG.APP_KEY &&
-                  CONFIG.APP_SECRET &&
-                  CONFIG.REFRESH_TOKEN &&
-                  CONFIG.APP_KEY !== 'your_dropbox_app_key_here');
+    async isConfigured() {
+        const config = await this.getConfig();
+        const configured = DropboxClient.isConfigValid(config);
+        if (!configured) {
+            console.warn(`${LOG_PREFIX} configuration missing or placeholder values detected`);
+        }
+        return configured;
     }
 
     /**
@@ -85,15 +94,18 @@ class DropboxClient {
      * @returns {Promise<boolean>}
      */
     async isConnected() {
-        if (!this.isConfigured()) {
+        const config = await this.getConfig();
+        if (!DropboxClient.isConfigValid(config)) {
             return false;
         }
         try {
+            console.debug(`${LOG_PREFIX} checking Dropbox connectivity`);
             await this.getUserInfo();
+            console.debug(`${LOG_PREFIX} Dropbox connectivity verified`);
             return true;
         } catch (error) {
             // AICODE-TRAP: Ошибки сети или токена считаем отсутствием подключения [2025-02-14]
-            console.error('Dropbox connection check failed:', error);
+            console.error(`${LOG_PREFIX} connection check failed`, error);
             return false;
         }
     }
@@ -105,13 +117,17 @@ class DropboxClient {
      * @returns {Promise<string>} - Путь к файлу в Dropbox
      */
     async uploadFile(fileBlob, filename) {
-        if (!this.isConfigured()) {
-            throw new Error('Dropbox не настроен. Проверьте config.js');
-        }
+        const config = await this.ensureConfigured();
 
         try {
+            const fileSize = typeof fileBlob.size === 'number' ? fileBlob.size : undefined;
             const accessToken = await this.getAccessToken();
-            const path = `${CONFIG.TARGET_FOLDER}/${filename}`;
+            const path = `${config.TARGET_FOLDER}/${filename}`;
+            console.log(`${LOG_PREFIX} uploading file`, {
+                filename,
+                path,
+                bytes: fileSize ?? 'unknown'
+            });
             
             // Конвертируем Blob в ArrayBuffer
             const arrayBuffer = await fileBlob.arrayBuffer();
@@ -132,15 +148,20 @@ class DropboxClient {
 
             if (!response.ok) {
                 const errorText = await response.text();
+                console.error(`${LOG_PREFIX} upload failed`, response.status, errorText);
                 throw new Error(`Upload failed: ${response.status} ${errorText}`);
             }
 
             const result = await response.json();
-            console.log('File uploaded to Dropbox:', result.path_display);
+            console.log(`${LOG_PREFIX} file uploaded`, {
+                path: result.path_display,
+                rev: result.rev,
+                size: result.size
+            });
             return result.path_display;
 
         } catch (error) {
-            console.error('Dropbox upload failed:', error);
+            console.error(`${LOG_PREFIX} upload error`, error);
             throw new Error(`Failed to upload to Dropbox: ${error.message}`);
         }
     }
@@ -150,11 +171,10 @@ class DropboxClient {
      * @returns {Promise<Object>}
      */
     async getUserInfo() {
-        if (!this.isConfigured()) {
-            throw new Error('Dropbox не настроен');
-        }
+        await this.ensureConfigured();
 
         try {
+            console.debug(`${LOG_PREFIX} requesting user info`);
             const accessToken = await this.getAccessToken();
             
             const response = await fetch('https://api.dropboxapi.com/2/users/get_current_account', {
@@ -172,9 +192,53 @@ class DropboxClient {
 
             return await response.json();
         } catch (error) {
-            console.error('Failed to get user info:', error);
+            console.error(`${LOG_PREFIX} failed to get user info`, error);
             throw error;
         }
+    }
+
+    /**
+     * @returns {Promise<{APP_KEY: string, APP_SECRET: string, REFRESH_TOKEN: string, TARGET_FOLDER: string}>}
+     */
+    async getConfig() {
+        if (!this.configPromise) {
+            this.configPromise = loadDropboxConfig().catch(error => {
+                this.configPromise = null;
+                console.error(`${LOG_PREFIX} failed to load Dropbox config`, error);
+                throw error;
+            });
+        }
+        const config = await this.configPromise;
+        this.cachedConfig = config;
+        return config;
+    }
+
+    /**
+     * @returns {Promise<{APP_KEY: string, APP_SECRET: string, REFRESH_TOKEN: string, TARGET_FOLDER: string}>}
+     */
+    async ensureConfigured() {
+        const config = await this.getConfig();
+        if (!DropboxClient.isConfigValid(config)) {
+            console.warn(`${LOG_PREFIX} configuration missing or placeholder values detected`);
+            throw new Error('Dropbox не настроен. Проверьте .env файл и перезапустите расширение');
+        }
+        return config;
+    }
+
+    /**
+     * @param {{APP_KEY?: string, APP_SECRET?: string, REFRESH_TOKEN?: string}} config
+     */
+    static isConfigValid(config) {
+        return Boolean(
+            config &&
+            typeof config.APP_KEY === 'string' &&
+            config.APP_KEY.trim() !== '' &&
+            typeof config.APP_SECRET === 'string' &&
+            config.APP_SECRET.trim() !== '' &&
+            typeof config.REFRESH_TOKEN === 'string' &&
+            config.REFRESH_TOKEN.trim() !== '' &&
+            config.APP_KEY.trim() !== 'your_dropbox_app_key_here'
+        );
     }
 }
 

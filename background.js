@@ -45,7 +45,16 @@ async function createEPUBFile(data, options = {}) {
         let dropboxPath;
         if (options.uploadToDropbox) {
             // AICODE-WHY: Service worker uploads immediately so users get Dropbox copy without extra steps [2025-10-20]
+            const blobSize = typeof result.blob.size === 'number' ? result.blob.size : undefined;
+            console.log('[background][dropbox] upload requested', {
+                filename: result.filename,
+                bytes: blobSize ?? 'unknown'
+            });
             dropboxPath = await dropboxClient.uploadFile(result.blob, result.filename);
+            console.log('[background][dropbox] upload completed', {
+                filename: result.filename,
+                dropboxPath
+            });
         }
 
         return {

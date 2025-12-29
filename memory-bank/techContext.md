@@ -17,6 +17,7 @@
 - Chrome extension development tools
 - JSDOM for DOM testing simulation
 - TypeScript for type checking (optional)
+- `.env` file providing Dropbox credentials (keys prefixed `DROPBOX_`), loaded dynamically by `config.js`
 
 ## Dependencies
 - **Runtime**: jszip.min.js loaded from CDN
