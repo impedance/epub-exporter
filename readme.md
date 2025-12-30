@@ -15,7 +15,7 @@
 - `epub_generator.js` — EPUB structure + JSZip integration; `rg -n "createEPUB" epub_generator.js`
 - `epub/` — templates + asset helpers; `rg -n "get.*Template" epub/`
 - `popup.html` / `popup.js` — UI flow; `rg -n "export" popup.js`
-- `dropbox_client.js` / `config.js` — Dropbox upload + config; `rg -n "Dropbox" dropbox_client.js config.js`
+- `dropbox_client.js` / `gmail_client.js` / `config.js` — Dropbox/Gmail upload + config; `rg -n "Dropbox|Gmail" dropbox_client.js gmail_client.js config.js`
 - `test/` — test suites and guidance; `rg -n "Running Tests" test/README.md`
 - `docs/` — context, status, decisions, templates
 - `scripts/` — repo tooling (AICODE linter)
@@ -27,6 +27,7 @@
 - `extractContent.js` — content script injection + messaging
 - `epub_generator.js` — EPUB building and templates
 - `dropbox_client.js` — Dropbox upload path
+- `gmail_client.js` — Gmail API export path
 
 ## Common tasks
 - `npm run lint:aicode`
@@ -52,6 +53,7 @@
 - **Экспорт выделенного текста** — пользователь выделяет нужный контент, и он попадает в EPUB
 - **Поддержка изображений** с конвертацией в base64 и встраиванием в EPUB
 - **Умная очистка контента** от навигации, рекламы и лишних элементов
+- **Отправка на Kindle** — прямая отправка EPUB в читалку через Gmail API
 - **Оптимизация для PocketBook** с читаемыми CSS стилями
 - **Полностью валидный EPUB** формат с правильной структурой
 - **Простой интерфейс** с прогресс-индикатором
@@ -152,6 +154,13 @@ book.epub
 2. Укажите значения `DROPBOX_APP_KEY`, `DROPBOX_APP_SECRET`, `DROPBOX_REFRESH_TOKEN` и при необходимости `DROPBOX_TARGET_FOLDER`.
 3. Держите `.env` вне Git (файл уже добавлен в `.gitignore`).
 4. При загрузке расширения убедитесь, что `.env` находится рядом с `manifest.json` — фоновые скрипты прочитают его автоматически.
+
+### Настройка Kindle (через Gmail API)
+
+1. Укажите свой `GMAIL_CLIENT_ID` (полученный в Google Cloud Console) в `.env` файле.
+2. Укажите `KINDLE_EMAIL` (адрес вашего устройства @kindle.com) в `.env`.
+3. Добавьте ваш адрес Gmail в список разрешенных отправителей в настройках Amazon Kindle ("Personal Document Settings").
+4. При первой отправке разрешите доступ во всплывающем окне Google.
 
 ## 🐛 Устранение неисправностей
 
