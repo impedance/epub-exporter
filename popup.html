@@ -153,6 +153,53 @@
             opacity: 0.8;
             color: #4CAF50;
         }
+
+        .settings-btn {
+            background: none;
+            border: none;
+            color: white;
+            opacity: 0.7;
+            cursor: pointer;
+            font-size: 12px;
+            margin-top: 10px;
+            text-decoration: underline;
+        }
+
+        .settings-btn:hover {
+            opacity: 1;
+        }
+
+        .kindle-section {
+            margin: 16px 0;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+        }
+
+        .kindle-option {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 10px;
+        }
+
+        .kindle-option label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .kindle-status {
+            font-size: 11px;
+            opacity: 0.8;
+            text-align: center;
+        }
+
+        .kindle-status.connected { color: #4CAF50; }
+        .kindle-status.disconnected { color: #FF9800; }
     </style>
 </head>
 <body>
@@ -169,6 +216,17 @@
             </div>
             <div id="dropboxStatus" class="dropbox-status"></div>
         </div>
+
+        <!-- Kindle Section -->
+        <div class="kindle-section">
+            <div class="kindle-option">
+                <label for="sendToKindle">
+                    <input type="checkbox" id="sendToKindle">
+                    📩 Отправить на Kindle
+                </label>
+            </div>
+            <div id="kindleStatus" class="kindle-status"></div>
+        </div>
         
         <button id="exportBtn" class="export-btn">
             Экспорт в EPUB
@@ -179,11 +237,14 @@
         </div>
         
         <div id="status" class="status"></div>
+        
+        <button id="settingsBtn" class="settings-btn">Настройки</button>
     </div>
     
     <script src="config.js"></script>
     <script type="module" src="extractContent.js"></script>
     <script type="module" src="dropbox_client.js"></script>
+    <script type="module" src="gmail_client.js"></script>
     <script src="popup.js"></script>
 </body>
 </html>

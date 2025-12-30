@@ -7,10 +7,46 @@ const ENV_KEY_MAP = {
     APP_KEY: 'DROPBOX_APP_KEY',
     APP_SECRET: 'DROPBOX_APP_SECRET',
     REFRESH_TOKEN: 'DROPBOX_REFRESH_TOKEN',
-    TARGET_FOLDER: 'DROPBOX_TARGET_FOLDER'
+    TARGET_FOLDER: 'DROPBOX_TARGET_FOLDER',
+    GMAIL_CLIENT_ID: 'GMAIL_CLIENT_ID',
+    KINDLE_EMAIL: 'KINDLE_EMAIL'
 };
 
 let cachedConfigPromise = null;
+let cachedGmailConfigPromise = null;
+
+/**
+ * Загружает конфигурацию Gmail/Kindle.
+ * @returns {Promise<{CLIENT_ID: string, KINDLE_EMAIL: string}>}
+ */
+export async function loadGmailConfig() {
+    if (!cachedGmailConfigPromise) {
+        cachedGmailConfigPromise = resolveGmailConfig();
+    }
+    return await cachedGmailConfigPromise;
+}
+
+async function resolveGmailConfig() {
+    // 1. Попытка загрузить из process.env (тесты)
+    const processEnv = loadFromProcessEnv();
+    if (processEnv && (processEnv.GMAIL_CLIENT_ID || processEnv.KINDLE_EMAIL)) {
+        return {
+            CLIENT_ID: processEnv.GMAIL_CLIENT_ID || '',
+            KINDLE_EMAIL: processEnv.KINDLE_EMAIL || ''
+        };
+    }
+
+    // 2. Попытка загрузить из .env файла
+    const envFile = await loadFromEnvFile();
+    if (envFile) {
+        return {
+            CLIENT_ID: envFile.GMAIL_CLIENT_ID || '',
+            KINDLE_EMAIL: envFile.KINDLE_EMAIL || ''
+        };
+    }
+
+    return { CLIENT_ID: '', KINDLE_EMAIL: '' };
+}
 
 /**
  * Загружает конфигурацию Dropbox, отдавая приоритет .env и глобальным значениям.

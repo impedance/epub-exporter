@@ -12,6 +12,10 @@ const popupHtml = `
       <input type="checkbox" id="uploadToDropbox">
       <div id="dropboxStatus"></div>
     </div>
+    <div class="kindle-section">
+      <input type="checkbox" id="sendToKindle">
+      <div id="kindleStatus"></div>
+    </div>
     <div id="progress"><div id="progressBar"></div></div>
     <div id="status"></div>
   </div>
@@ -19,7 +23,9 @@ const popupHtml = `
 
 async function loadPopup({
   dropboxConnected = true,
+  gmailConnected = true,
   autoUpload = false,
+  autoSendKindle = false,
   tabUrl = 'https://example.com/article',
   extractContentResponse = { success: true, data: { title: 'Sample', content: '<p>Test</p>', images: [], url: tabUrl, timestamp: new Date().toISOString() } },
   createEPUBResponse = { success: true, downloadUrl: 'data:application/epub+zip;base64,', filename: 'Sample.epub' }
@@ -50,7 +56,10 @@ async function loadPopup({
   const storageGetCalls = [];
   const storageGet = async (keys) => {
     storageGetCalls.push(keys);
-    return { autoUploadToDropbox: autoUpload };
+    return {
+      autoUploadToDropbox: autoUpload,
+      autoSendToKindle: autoSendKindle
+    };
   };
 
   const tabsCreateCalls = [];
@@ -86,6 +95,12 @@ async function loadPopup({
     }
   };
 
+  const gmailClient = {
+    isConnected: async () => gmailConnected,
+    sendEmail: async () => ({ id: 'ok' }),
+    getAccessToken: async () => 'token'
+  };
+
   const extractCalls = [];
   const extractContentFromTab = async (tabId) => {
     extractCalls.push(tabId);
@@ -98,6 +113,7 @@ async function loadPopup({
     console,
     chrome,
     dropboxClient,
+    gmailClient,
     extractContentFromTab,
     fetch: async (url) => ({
       blob: async () => new Blob([`content from ${url}`], { type: 'application/epub+zip' })
@@ -109,6 +125,7 @@ async function loadPopup({
   sandbox.window.console = console;
   sandbox.window.chrome = chrome;
   sandbox.window.dropboxClient = dropboxClient;
+  sandbox.window.gmailClient = gmailClient;
   sandbox.window.extractContentFromTab = extractContentFromTab;
   sandbox.window.fetch = sandbox.fetch;
   sandbox.window.setTimeout = setTimeout;
@@ -160,7 +177,7 @@ test('popup initialization reflects Dropbox connection and saved settings', asyn
   if (exportBtn.disabled) {
     throw new Error('Export button should remain enabled for regular pages');
   }
-  if (JSON.stringify(storageGetCalls) !== JSON.stringify([['autoUploadToDropbox']])) {
+  if (JSON.stringify(storageGetCalls) !== JSON.stringify([['autoUploadToDropbox', 'autoSendToKindle']])) {
     throw new Error(`Unexpected storage keys: ${JSON.stringify(storageGetCalls)}`);
   }
 });

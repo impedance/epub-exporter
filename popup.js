@@ -1,9 +1,10 @@
 // @ts-check
 /* global chrome, extractContentFromTab, dropboxClient */
 
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     const exportBtn = /** @type {HTMLButtonElement} */ (document.getElementById('exportBtn'));
     const uploadToDropboxCheckbox = /** @type {HTMLInputElement} */ (document.getElementById('uploadToDropbox'));
+    const sendToKindleCheckbox = /** @type {HTMLInputElement} */ (document.getElementById('sendToKindle'));
     const settingsBtn = /** @type {HTMLButtonElement} */ (document.getElementById('settingsBtn'));
     const progress = /** @type {HTMLDivElement} */ (document.getElementById('progress'));
     const progressBar = /** @type {HTMLDivElement} */ (document.getElementById('progressBar'));
@@ -21,19 +22,23 @@ document.addEventListener('DOMContentLoaded', function() {
     exportBtn.addEventListener('click', handleExport);
     settingsBtn.addEventListener('click', openSettings);
     uploadToDropboxCheckbox.addEventListener('change', handleDropboxToggle);
+    sendToKindleCheckbox.addEventListener('change', handleKindleToggle);
 
     /**
      * Инициализация popup
      */
     async function initializePopup() {
         try {
-            // Проверяем статус Dropbox подключения
+            // Проверяем статусы подключений
             debugLog('Initializing popup');
-            await updateDropboxStatus();
-            
+            await Promise.all([
+                updateDropboxStatus(),
+                updateGmailStatus()
+            ]);
+
             // Загружаем сохраненные настройки
             await loadSettings();
-            
+
             // Проверяем возможность экспорта
             await checkExportAvailability();
         } catch (error) {
@@ -49,7 +54,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const dropboxStatus = /** @type {HTMLDivElement} */ (document.getElementById('dropboxStatus'));
             const isConnected = await dropboxClient.isConnected();
             debugLog('Dropbox connection status', { isConnected });
-            
+
             if (isConnected) {
                 dropboxStatus.textContent = '📁 Dropbox подключен';
                 dropboxStatus.className = 'dropbox-status connected';
@@ -66,16 +71,45 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     /**
+     * Обновляет статус Gmail/Kindle подключения
+     */
+    async function updateGmailStatus() {
+        try {
+            const kindleStatus = /** @type {HTMLDivElement} */ (document.getElementById('kindleStatus'));
+            // @ts-ignore
+            const isConnected = await window.gmailClient.isConnected();
+            debugLog('Gmail connection status', { isConnected });
+
+            if (isConnected) {
+                kindleStatus.textContent = '📧 Gmail подключен';
+                kindleStatus.className = 'kindle-status connected';
+                sendToKindleCheckbox.disabled = false;
+            } else {
+                kindleStatus.textContent = '📧 Gmail не подключен';
+                kindleStatus.className = 'kindle-status disconnected';
+                sendToKindleCheckbox.disabled = false;
+            }
+        } catch (error) {
+            console.error('Error updating Gmail status:', error);
+        }
+    }
+
+    /**
      * Загружает сохраненные настройки
      */
     async function loadSettings() {
         try {
-            const settings = await chrome.storage.local.get(['autoUploadToDropbox']);
+            const settings = await chrome.storage.local.get(['autoUploadToDropbox', 'autoSendToKindle']);
             debugLog('Loaded settings', settings);
-            
+
             // Устанавливаем чекбокс автозагрузки если Dropbox подключен
             if (!uploadToDropboxCheckbox.disabled && settings.autoUploadToDropbox) {
                 uploadToDropboxCheckbox.checked = true;
+            }
+
+            // Устанавливаем чекбокс Kindle
+            if (settings.autoSendToKindle) {
+                sendToKindleCheckbox.checked = true;
             }
         } catch (error) {
             console.error('Error loading settings:', error);
@@ -90,13 +124,13 @@ document.addEventListener('DOMContentLoaded', function() {
             const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
             const currentTab = tabs[0];
             debugLog('Active tab info', currentTab);
-            
+
             if (!currentTab || !currentTab.url) {
                 setStatus('⚠️ Экспорт недоступен', 'error');
                 exportBtn.disabled = true;
                 return;
             }
-            
+
             if (currentTab.url.startsWith('chrome://') || currentTab.url.startsWith('chrome-extension://')) {
                 setStatus('⚠️ Экспорт недоступен для системных страниц', 'error');
                 exportBtn.disabled = true;
@@ -116,13 +150,14 @@ document.addEventListener('DOMContentLoaded', function() {
      */
     async function handleExport() {
         const shouldUploadToDropbox = uploadToDropboxCheckbox.checked;
-        debugLog('Starting export flow', { shouldUploadToDropbox });
-        
+        const shouldSendToKindle = sendToKindleCheckbox.checked;
+        debugLog('Starting export flow', { shouldUploadToDropbox, shouldSendToKindle });
+
         try {
             // Шаг 1: Инициализация
-            renderWorkflowStage('init', shouldUploadToDropbox);
+            renderWorkflowStage('init', { dropbox: shouldUploadToDropbox, kindle: shouldSendToKindle });
             setProgress(5);
-            
+
             // Получаем активную вкладку
             const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
             const tab = tabs[0];
@@ -130,57 +165,76 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!tab?.id) {
                 throw new Error('Не удалось получить текущую вкладку');
             }
-            
+
             // Шаг 2: Извлечение контента
-            renderWorkflowStage('extract', shouldUploadToDropbox);
+            renderWorkflowStage('extract', { dropbox: shouldUploadToDropbox, kindle: shouldSendToKindle });
             setProgress(20);
-            
+
             const response = await extractContentFromTab(tab.id);
             debugLog('Content extraction response', response);
-            
+
             if (!response || !response.success) {
                 throw new Error(response?.error || 'Не удалось извлечь контент');
             }
-            
+
             // Шаг 3: Создание EPUB
-            renderWorkflowStage('epub', shouldUploadToDropbox);
-            setProgress(50);
-            
+            renderWorkflowStage('epub', { dropbox: shouldUploadToDropbox, kindle: shouldSendToKindle });
+            setProgress(40);
+
             const epubResponse = await chrome.runtime.sendMessage({
                 action: 'createEPUB',
                 data: response.data,
                 uploadToDropbox: shouldUploadToDropbox
             });
             debugLog('EPUB generation response', epubResponse);
-            
+
             if (!epubResponse || !epubResponse.success) {
                 throw new Error(epubResponse?.error || 'Ошибка создания EPUB');
             }
-            
-            // Шаг 4: Загрузка в Dropbox (если включена)
-            renderWorkflowStage('done', shouldUploadToDropbox);
-            setProgress(shouldUploadToDropbox ? 95 : 85);
-            
+
+            // Шаг 4: Загрузка / Отправка
+            if (shouldUploadToDropbox) {
+                renderWorkflowStage('upload', { dropbox: shouldUploadToDropbox, kindle: shouldSendToKindle });
+                setProgress(60);
+                // Загрузка в Dropbox происходит в background.js (см. epubResponse)
+            }
+
+            if (shouldSendToKindle) {
+                renderWorkflowStage('kindle', { dropbox: shouldUploadToDropbox, kindle: shouldSendToKindle });
+                setProgress(shouldUploadToDropbox ? 80 : 70);
+
+                // Нам нужен сам файл для отправки
+                const fileResponse = await fetch(epubResponse.downloadUrl);
+                const fileBlob = await fileResponse.blob();
+
+                // @ts-ignore
+                await window.gmailClient.sendEmail(fileBlob, epubResponse.filename);
+            }
+
+            renderWorkflowStage('done', { dropbox: shouldUploadToDropbox, kindle: shouldSendToKindle });
+            setProgress(100);
+
             // Финальная загрузка файла
             await chrome.downloads.download({
                 url: epubResponse.downloadUrl,
                 filename: epubResponse.filename
             });
             debugLog('Triggered download', { filename: epubResponse.filename });
-            
+
             setProgress(100);
-            
-            const successMessage = shouldUploadToDropbox ? 
-                `✅ EPUB создан и загружен в Dropbox${epubResponse.dropboxPath ? ` (${epubResponse.dropboxPath})` : ''}!` : 
-                '✅ EPUB файл успешно создан!';
-            
-            setStatus(successMessage, 'success');
-            
+
+            const successMessage = []
+            successMessage.push('✅ EPUB файл успешно создан!');
+            if (shouldUploadToDropbox) successMessage.push('📁 Загружен в Dropbox.');
+            if (shouldSendToKindle) successMessage.push('📩 Отправлен на Kindle.');
+
+            setStatus(successMessage.join('<br>'), 'success');
+
             // Закрываем popup через 2 секунды
             setTimeout(() => {
                 window.close();
             }, 2000);
-            
+
         } catch (error) {
             const err = /** @type {Error} */ (error);
             console.error('Ошибка экспорта:', err);
@@ -199,9 +253,43 @@ document.addEventListener('DOMContentLoaded', function() {
             uploadToDropboxCheckbox.checked = false;
             openSettings();
         }
+
+        // Сохраняем настройку
+        await chrome.storage.local.set({ autoUploadToDropbox: uploadToDropboxCheckbox.checked });
+
         debugLog('Dropbox toggle changed', {
             checked: uploadToDropboxCheckbox.checked,
             disabled: uploadToDropboxCheckbox.disabled
+        });
+    }
+
+    /**
+     * Обрабатывает изменение чекбокса Kindle
+     */
+    async function handleKindleToggle() {
+        if (sendToKindleCheckbox.checked) {
+            try {
+                // @ts-ignore
+                const isConnected = await window.gmailClient.isConnected();
+                if (!isConnected) {
+                    // Пытаемся авторизоваться сразу
+                    // @ts-ignore
+                    await window.gmailClient.getAccessToken(true);
+                    await updateGmailStatus();
+                }
+            } catch (error) {
+                console.error('Auth failed', error);
+                sendToKindleCheckbox.checked = false;
+                setStatus('❌ Ошибка авторизации Gmail', 'error');
+                return;
+            }
+        }
+
+        // Сохраняем настройку
+        await chrome.storage.local.set({ autoSendToKindle: sendToKindleCheckbox.checked });
+
+        debugLog('Kindle toggle changed', {
+            checked: sendToKindleCheckbox.checked
         });
     }
 
@@ -229,20 +317,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
     /**
      * Обновляет визуализацию этапов экспорта, избегая дублирования разметки.
-     * @param {'init'|'extract'|'epub'|'done'} stage
-     * @param {boolean} includeDropbox
+     * @param {'init'|'extract'|'epub'|'upload'|'kindle'|'done'} stage
+     * @param {{dropbox: boolean, kindle: boolean}} options
      */
-    function renderWorkflowStage(stage, includeDropbox) {
+    function renderWorkflowStage(stage, options) {
         const steps = [
             { key: 'init', text: 'Инициализация' },
             { key: 'extract', text: 'Извлечение контента' },
             { key: 'epub', text: 'Создание EPUB файла' }
         ];
 
-        if (includeDropbox) {
+        if (options.dropbox) {
             steps.push({ key: 'upload', text: 'Загрузка в Dropbox' });
         }
-        debugLog('Render workflow stage', { stage, includeDropbox });
+        if (options.kindle) {
+            steps.push({ key: 'kindle', text: 'Отправка на Kindle' });
+        }
+        debugLog('Render workflow stage', { stage, options });
 
         let viewSteps;
         if (stage === 'done') {
@@ -277,7 +368,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const stepsHtml = steps.map(step => {
             let className = 'step';
             let icon = '🔸';
-            
+
             if (step.completed) {
                 className += ' completed';
                 icon = '✅';
@@ -285,10 +376,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 className += ' active';
                 icon = '🔄';
             }
-            
+
             return `<div class="${className}">${icon} ${step.text}</div>`;
         }).join('');
-        
+
         status.innerHTML = `<div class="multi-step">${stepsHtml}</div>`;
         status.className = 'status';
         debugLog('Multi-step status rendered', steps);
