@@ -1,4 +1,4 @@
-/* AICODE-WHY: Centralized type definitions ensure consistent cross-module contracts and reduce duplication [2025-08-15] */
+/* AICODE-NOTE: DECISION/TYPE-CENTRAL decision: centralized types keep cross-module contracts consistent. */
 
 export interface ExtractedImage {
   src: string;
