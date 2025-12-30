@@ -15,14 +15,15 @@ Export user-selected web content into clean EPUB files optimized for PocketBook 
 ## Core Requirements
 - Extract selected content from web pages.
 - Convert content to valid EPUB packaging with metadata and styling.
-- Provide a download flow (optional Dropbox upload).
+- Provide a download flow (optional Dropbox upload or Send to Kindle).
 
 ## Stack Summary
 - Chrome Extension (Manifest V3), JavaScript ES modules.
 - Content extraction: Selection API + DOM processing.
 - EPUB packaging: custom templates + JSZip.
 - Tests: Node.js built-in test runner + JSDOM.
-- Optional Dropbox upload via `.env` config loaded by `config.js`.
+- Optional Dropbox upload or Gmail (Send to Kindle) via `.env` config loaded by `config.js`.
+- OAuth 2.0 flow via `chrome.identity` for Gmail API.
 
 ## Architecture Patterns
 - Content script extracts selected HTML/text and image metadata.
@@ -33,7 +34,7 @@ Export user-selected web content into clean EPUB files optimized for PocketBook 
 ## Invariants (Do Not Break)
 - Selection-based extraction is the only supported capture path.
 - EPUB output must keep valid structure (mimetype, META-INF, OEBPS).
-- Secrets stay out of git; Dropbox config is loaded from `.env` at runtime.
+- Secrets stay out of git; Dropbox/Gmail config is loaded from `.env` at runtime.
 
 ## Constraints
 - Chrome Web Store policies and MV3 service worker limits.
@@ -46,3 +47,4 @@ Export user-selected web content into clean EPUB files optimized for PocketBook 
 - `background.js` (EPUB generation, image fetching)
 - `epub_generator.js` (EPUB structure and templates)
 - `popup.js` (UI flow)
+- `gmail_client.js` (Gmail API integration)
