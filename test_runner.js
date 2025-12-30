@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 // Test runner script to validate the selection-based EPUB exporter
+// AICODE-NOTE: NAV/TESTS entry: npm test, npm run test:verbose ref: test/README.md
 
 console.log('🧪 Running EPUB Exporter Tests\n');
 

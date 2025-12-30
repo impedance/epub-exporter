@@ -5,6 +5,7 @@ import EPUBGenerator from './epub_generator.js';
 import './config.js';
 import DropboxClient from './dropbox_client.js';
 
+// AICODE-NOTE: NAV/BACKGROUND entry: chrome.runtime.onMessage -> createEPUBFile ref: background.js
 /** @typedef {import('./types').ExtractedImage} ExtractedImage */
 /** @typedef {import('./types').ExtractedContent} ExtractedContent */
 // AICODE-LINK: ./types.d.ts#ExtractedImage
@@ -44,7 +45,7 @@ async function createEPUBFile(data, options = {}) {
 
         let dropboxPath;
         if (options.uploadToDropbox) {
-            // AICODE-WHY: Service worker uploads immediately so users get Dropbox copy without extra steps [2025-10-20]
+            // AICODE-NOTE: DECISION/DROPBOX-UPLOAD decision: upload immediately so users get Dropbox copy without extra steps.
             const blobSize = typeof result.blob.size === 'number' ? result.blob.size : undefined;
             console.log('[background][dropbox] upload requested', {
                 filename: result.filename,
@@ -69,7 +70,7 @@ async function createEPUBFile(data, options = {}) {
     }
 }
 
-// AICODE-WHY: Background fetch bypasses strict canvas CORS so EPUB always embeds remote images [2025-10-21]
+// AICODE-NOTE: DECISION/IMAGE-FETCH decision: background fetch bypasses canvas CORS to embed remote images.
 /**
  * Загружает изображение и возвращает data URL строку.
  * @param {string} url
@@ -83,8 +84,7 @@ async function fetchImageAsDataURL(url) {
     return await fetchImageViaXHR(url);
 }
 
-// AICODE-WHY: HTML fallback parsing fetches remote <img> assets even when selection metadata misses them [2025-10-22]
-// AICODE-WHY: Background normalizes missing image blobs so EPUB packs remote assets even when content script hits CORS walls [2025-10-22]
+// AICODE-NOTE: DECISION/IMAGE-NORMALIZE decision: parse HTML + normalize missing image blobs so EPUB packs remote assets when selection metadata is incomplete.
 /**
  * Ensures every image has an embeddable data URL, fetching in the background if needed.
  * @param {ExtractedImage[]} [images=[]]
@@ -312,7 +312,7 @@ function extractImageCandidatesFromHtml(html, pageUrl) {
     return candidates;
 }
 
-// AICODE-TRAP: CDN responses may block Fetch API despite host permissions; fall back to XHR which still works in MV3 background [2025-10-22]
+// AICODE-TRAP: TRAP/FETCH-CDN CDN responses may block Fetch API despite host permissions; fall back to XHR in MV3 background [2025-10-22]
 /**
  * @param {string} url
  * @returns {Promise<string|null>}

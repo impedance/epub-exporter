@@ -2,7 +2,7 @@
 /* global JSZip */
 // EPUB Generator - Утилиты для создания EPUB файлов
 // Этот модуль предоставляет дополнительные функции
-/* AICODE-WHY: Typed EPUB generation ensures predictable EPUB structure and catch integration issues early [2025-08-13] */
+/* AICODE-NOTE: DECISION/EPUB-TYPED decision: typed EPUB generation keeps structure predictable and catches integration issues early. */
 import './jszip.min.js';
 // AICODE-LINK: ./epub/assets.js
 // AICODE-LINK: ./epub/templates/index.js
@@ -97,7 +97,7 @@ class EPUBGenerator {
             });
 
             let downloadUrl;
-            // AICODE-TRAP: Service workers may lack URL.createObjectURL; convert blob to data URL fallback [2025-08-14]
+            // AICODE-TRAP: TRAP/OBJECT-URL service workers may lack URL.createObjectURL; convert blob to data URL fallback [2025-08-14]
             if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
                 downloadUrl = URL.createObjectURL(epubBlob);
             } else {
@@ -136,8 +136,8 @@ class EPUBGenerator {
      * @returns {Promise<JSZipConstructor>}
      */
     async loadJSZip() {
-        // AICODE-TRAP: JSZip is loaded into global scope via import in Manifest V3 modules, but might not be ready instantly. [2025-08-12]
-        // AICODE-WHY: The import at the top of the module handles loading. This function now just validates that it's loaded. [2025-08-12]
+        // AICODE-TRAP: TRAP/JSZIP-INIT JSZip is loaded via import, but might not be ready instantly in MV3. [2025-08-12]
+        // AICODE-NOTE: DECISION/JSZIP-IMPORT decision: module import loads JSZip; this function validates availability.
         if (typeof JSZip !== 'undefined') {
             // Проверяем целостность уже загруженной библиотеки
             if (!this.validateJSZipIntegrity(JSZip)) {

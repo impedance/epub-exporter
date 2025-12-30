@@ -4,6 +4,7 @@
   "description": "Полнофункциональное Chrome расширение для извлечения контента из веб-страниц и конвертации в формат EPUB, оптимизированный для PocketBook и других электронных читалок.",
   "main": "background.js",
   "scripts": {
+    "lint:aicode": "bash scripts/lint-aicode.sh",
     "test": "node --test",
     "test:verbose": "node test_runner.js",
     "test:functions": "node --test test/content_functions.test.mjs",

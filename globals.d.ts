@@ -1,4 +1,4 @@
-/* AICODE-WHY: Minimal global declarations to satisfy TypeScript when npm types unavailable [2025-08-13] */
+/* AICODE-NOTE: DECISION/TS-GLOBALS decision: minimal globals keep typecheck working when npm types are unavailable. */
 declare const chrome: any;
 declare const JSZip: any;
 declare const module: any;

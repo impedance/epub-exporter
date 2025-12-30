@@ -1,7 +1,7 @@
 // @ts-check
 /* global chrome */
 // Simplified Dropbox client for single-user Chrome Extension
-// AICODE-WHY: No OAuth needed for single user - use hardcoded refresh token like tg2book [2025-08-12]
+// AICODE-NOTE: DECISION/DROPBOX-AUTH decision: single-user extension uses a refresh token without full OAuth flow.
 // AICODE-LINK: ./config.js#loadDropboxConfig
 
 import { loadDropboxConfig } from './config.js';
@@ -104,7 +104,7 @@ class DropboxClient {
             console.debug(`${LOG_PREFIX} Dropbox connectivity verified`);
             return true;
         } catch (error) {
-            // AICODE-TRAP: Ошибки сети или токена считаем отсутствием подключения [2025-02-14]
+            // AICODE-TRAP: TRAP/DROPBOX-CONNECTION network or token errors are treated as disconnected [2025-02-14]
             console.error(`${LOG_PREFIX} connection check failed`, error);
             return false;
         }

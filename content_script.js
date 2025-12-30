@@ -1,7 +1,8 @@
 // @ts-check
 /* global chrome */
 // Content script для извлечения контента страницы
-/* AICODE-WHY: JSDoc types formalize the content contract for cross-module reuse [2025-08-13] */
+// AICODE-NOTE: NAV/CONTENT entry: extractPageContent via chrome.runtime.onMessage
+/* AICODE-NOTE: DECISION/TYPE-JSDOC decision: JSDoc types formalize the content contract for reuse. */
 // AICODE-LINK: ./types.d.ts#ExtractedImage
 // AICODE-LINK: ./types.d.ts#ExtractedContent
 
@@ -24,7 +25,7 @@ async function extractPageContent() {
     try {
         // Получаем выделенный текст
         const selection = window.getSelection();
-        
+        // AICODE-CONTRACT: CONTRACT/SELECTION require non-empty user selection before export [2025-12-29]
         if (!selection || selection.rangeCount === 0 || selection.toString().trim() === '') {
             throw new Error('Пожалуйста, выделите текст на странице для экспорта');
         }
@@ -173,7 +174,7 @@ async function extractTextContentFromElement(container) {
     const processedElements = new Set(); // Отслеживаем обработанные элементы
     
     // Обрабатываем элементы в порядке появления в документе
-    // AICODE-WHY: Including images preserves visual context in exported EPUB [2025-08-14]
+    // AICODE-NOTE: DECISION/INCLUDE-IMAGES decision: include images to preserve visual context in EPUB.
     const walker = document.createTreeWalker(
         clone,
         NodeFilter.SHOW_ELEMENT,
@@ -292,12 +293,12 @@ function processElement(element) {
             const alt = cleanText(element.getAttribute('alt') || '');
             const width = element.getAttribute('width') || element.width;
             const height = element.getAttribute('height') || element.height;
-            // AICODE-TRAP: Preserve original src so EPUB generator can map to downloaded file [2025-08-14]
+            // AICODE-TRAP: TRAP/IMG-ORIGINAL-SRC preserve original src so EPUB generator can map to downloaded file [2025-08-14]
             return `<img src="${src}" alt="${alt}"${width ? ` width="${width}` : ''}${width ? '"' : ''}${height ? ` height="${height}` : ''}${height ? '"' : ''}/>`;
         }
 
         case 'span': {
-            // AICODE-WHY: Bubble HTML wraps paragraphs in span nodes; treat them as block-level text [2025-10-20]
+            // AICODE-NOTE: DECISION/BUBBLE-SPANS decision: Bubble HTML wraps paragraphs in span nodes; treat them as block-level text.
             const spanText = cleanText(element.textContent);
             return spanText ? `<p>${spanText}</p>` : '';
         }
@@ -368,7 +369,7 @@ async function extractImages(container) {
     
     for (let img of imgElements) {
         try {
-            // AICODE-TRAP: jsdom clones report zero width/height; prefer natural dimensions or attributes to avoid dropping real images [2025-08-14]
+            // AICODE-TRAP: TRAP/JSDOM-IMG-DIMS jsdom clones report zero width/height; prefer natural dimensions or attributes to avoid dropping real images [2025-08-14]
             const attrWidth = parseInt(img.getAttribute('width') || '', 10);
             const attrHeight = parseInt(img.getAttribute('height') || '', 10);
             const effectiveWidth = img.naturalWidth || (!Number.isNaN(attrWidth) ? attrWidth : img.width);
@@ -404,7 +405,7 @@ async function extractImages(container) {
     return images;
 }
 
-// AICODE-TRAP: CDN images without CORS taint canvas; use fetch fallback first [2025-10-21]
+// AICODE-TRAP: TRAP/CORS-CANVAS CDN images without CORS taint canvas; use fetch fallback first [2025-10-21]
 /**
  * Конвертирует изображение в base64 с учетом CORS ограничений.
  * @param {string} rawSrc
