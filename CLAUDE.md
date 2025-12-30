@@ -15,7 +15,8 @@ The extension follows a standard Chrome Extension architecture with these compon
 - **popup.html/popup.js**: User interface with export button and progress indicator
 - **content_script.js**: Runs on web pages to extract content from user text selections
 - **background.js**: Service worker that handles EPUB generation using JSZip library
-- **epub_generator.js**: Referenced in manifest but not used in current implementation
+- **epub_generator.js**: Handles EPUB creation logic (imported in background.js)
+- **dropbox_client.js**: Handles authentication and file uploads to Dropbox
 
 ### Key Workflows
 
@@ -26,14 +27,21 @@ The extension follows a standard Chrome Extension architecture with these compon
    - Converts images within selection to base64 format
    - Handles both structured HTML and plain text selections
 
-2. **EPUB Generation** (`background.js`):
+2. **EPUB Generation** (`background.js` & `epub_generator.js`):
+   - Uses `EPUBGenerator` class to orchestrate the process
    - Loads JSZip library from CDN (`https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js`)
    - Creates valid EPUB structure with META-INF, OEBPS folders
    - Generates required EPUB files: mimetype, container.xml, content.opf, toc.ncx, chapter1.xhtml, styles.css
    - Embeds images and updates references
    - Triggers download via Chrome downloads API
 
-3. **User Interface** (`popup.js`):
+3. **Dropbox Upload** (`background.js` & `dropbox_client.js`):
+   - Optional step triggered if "Save to Dropbox" is checked
+   - Authenticates user via OAuth 2.0 PKCE flow
+   - Uploads generated EPUB blob directly to Dropbox App folder
+   - Returns upload path to UI
+
+4. **User Interface** (`popup.js`):
    - Handles export button clicks
    - Shows progress indicator during processing
    - Communicates between content script and background script
@@ -97,7 +105,7 @@ zip -r epub-exporter.zip manifest.json popup.html popup.js content_script.js bac
 
 The extension now works universally with any website through text selection. Key customization areas:
 
-To adjust EPUB styling, modify the `createCSS()` function in `background.js:202`.
+To adjust EPUB styling, modify `getStylesTemplate()` in `epub/templates/styles.js`.
 
 To change content extraction logic, update `extractSelectedContent()` in `content_script.js:91`.
 
