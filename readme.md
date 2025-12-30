@@ -2,6 +2,51 @@
 
 Полнофункциональное Chrome расширение для извлечения контента из веб-страниц и конвертации в формат EPUB, оптимизированный для PocketBook и других электронных читалок.
 
+## For coding agents (read first)
+- Start with `AGENTS.md` for repo protocol.
+- Read `docs/context.md` and `docs/status.md`.
+- Use `rg -n "AICODE-" .` to navigate anchors.
+
+## Repository layout
+- `manifest.json` — extension wiring, permissions, scripts; `rg -n "manifest_version" manifest.json`
+- `content_script.js` — selection extraction entry point; `rg -n "AICODE-" content_script.js`
+- `background.js` — EPUB creation + image fetch fallback; `rg -n "AICODE-" background.js`
+- `extractContent.js` — tab messaging + content script injection; `rg -n "extractContent" extractContent.js`
+- `epub_generator.js` — EPUB structure + JSZip integration; `rg -n "createEPUB" epub_generator.js`
+- `epub/` — templates + asset helpers; `rg -n "get.*Template" epub/`
+- `popup.html` / `popup.js` — UI flow; `rg -n "export" popup.js`
+- `dropbox_client.js` / `config.js` — Dropbox upload + config; `rg -n "Dropbox" dropbox_client.js config.js`
+- `test/` — test suites and guidance; `rg -n "Running Tests" test/README.md`
+- `docs/` — context, status, decisions, templates
+- `scripts/` — repo tooling (AICODE linter)
+
+## Entry points
+- `content_script.js` — selection extraction flow (`AICODE-NOTE: NAV/CONTENT`)
+- `background.js` — EPUB build and image normalization (`AICODE-NOTE: NAV/BACKGROUND`)
+- `popup.js` — UI orchestration
+- `extractContent.js` — content script injection + messaging
+- `epub_generator.js` — EPUB building and templates
+- `dropbox_client.js` — Dropbox upload path
+
+## Common tasks
+- `npm run lint:aicode`
+- `npm test`
+- `npm run test:verbose`
+- `npm run test:functions`
+- `npm run typecheck`
+
+## Search cookbook
+- `rg -n "AICODE-" .`
+- `rg -n "extractSelectedContent" content_script.js`
+- `rg -n "extractPageContent" content_script.js extractContent.js`
+- `rg -n "createEPUB" background.js epub_generator.js`
+- `rg -n "JSZip" background.js epub_generator.js`
+- `rg -n "Dropbox" dropbox_client.js config.js popup.js`
+- `rg -n "fetchImage" background.js content_script.js`
+- `rg -n "Selection" content_script.js test/`
+- `rg -n "manifest_version" manifest.json`
+- `rg -n "test:" package.json test/README.md`
+
 ## 🚀 Возможности
 
 - **Экспорт выделенного текста** — пользователь выделяет нужный контент, и он попадает в EPUB
@@ -10,19 +55,6 @@
 - **Оптимизация для PocketBook** с читаемыми CSS стилями
 - **Полностью валидный EPUB** формат с правильной структурой
 - **Простой интерфейс** с прогресс-индикатором
-
-## 📁 Структура файлов
-
-```
-epub-exporter/
-├── manifest.json          # Конфигурация расширения (Manifest V3)
-├── popup.html             # HTML интерфейс popup
-├── popup.js               # Логика интерфейса
-├── content_script.js      # Извлечение контента со страниц
-├── background.js          # Создание EPUB файлов
-├── epub_generator.js      # Утилиты для генерации EPUB
-└── README.md             # Документация
-```
 
 ## 🛠️ Установка
 
@@ -47,8 +79,6 @@ mv epub-exporter.zip epub-exporter.crx
 ```
 
 ## 🎯 Использование
-
-### Базовое использование
 
 1. **Откройте веб-страницу** с нужным материалом
 2. **Выделите текст** и связанные элементы (изображения, списки)
@@ -110,24 +140,11 @@ book.epub
 
 ### Модификация CSS стилей
 
-Отредактируйте функцию `createCSS()` в `background.js`:
-
-```javascript
-function createCSS() {
-    return `
-    body {
-        font-family: "Times New Roman", Times, serif;
-        font-size: 1.2em;           /* Увеличить размер шрифта */
-        line-height: 1.8;           /* Увеличить межстрочный интервал */
-        margin: 2em;                /* Увеличить отступы */
-    }
-    `;
-}
-```
+Отредактируйте функцию `getStylesTemplate()` в `epub/templates/styles.js`.
 
 ### Настройка логики выделения
 
-Основная логика извлечения находится в `extractSelectedContent()` внутри `content_script.js`. При необходимости расширьте обработку выделенного диапазона (например, добавьте поддержку таблиц или подписей к изображениям).
+Основная логика извлечения находится в `extractSelectedContent()` внутри `content_script.js`.
 
 ### Настройка Dropbox
 
@@ -135,14 +152,6 @@ function createCSS() {
 2. Укажите значения `DROPBOX_APP_KEY`, `DROPBOX_APP_SECRET`, `DROPBOX_REFRESH_TOKEN` и при необходимости `DROPBOX_TARGET_FOLDER`.
 3. Держите `.env` вне Git (файл уже добавлен в `.gitignore`).
 4. При загрузке расширения убедитесь, что `.env` находится рядом с `manifest.json` — фоновые скрипты прочитают его автоматически.
-
-### Добавление новых форматов извлечения
-
-В `extractTextContent()` добавьте новые элементы:
-
-```javascript
-const textElements = clone.querySelectorAll('p, h1, h2, h3, article, section');
-```
 
 ## 🐛 Устранение неисправностей
 
@@ -164,23 +173,6 @@ const textElements = clone.querySelectorAll('p, h1, h2, h3, article, section');
 2. Убедитесь, что браузер разрешает загрузки
 3. Проверьте консоль background script
 
-### Отладка
-
-Включите подробное логирование:
-
-```javascript
-// В content_script.js добавьте
-console.log('Selection ranges:', window.getSelection().rangeCount);
-console.log('Extracted content:', content);
-
-// В background.js добавьте
-console.log('Creating EPUB with data:', data);
-```
-
-## 📝 Лицензия
-
-MIT License - свободное использование и модификация.
-
 ## 🤝 Участие в разработке
 
 1. Fork репозитория
@@ -191,12 +183,10 @@ MIT License - свободное использование и модифика�
 
 ## 📞 Поддержка
 
-При возникновении проблем:
-
 1. Проверьте раздел "Устранение неисправностей"
 2. Откройте DevTools и изучите ошибки в консоли
 3. Создайте Issue с подробным описанием проблемы
 
----
+## 📝 Лицензия
 
-**Приятного чтения! 📚**
+MIT License - свободное использование и модификация.
