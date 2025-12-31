@@ -23,8 +23,14 @@ document.addEventListener('DOMContentLoaded', function () {
     exportBtn.addEventListener('click', handleExport);
     previewBtn.addEventListener('click', handlePreview);
     settingsBtn.addEventListener('click', openSettings);
-    uploadToDropboxCheckbox.addEventListener('change', handleDropboxToggle);
-    sendToKindleCheckbox.addEventListener('change', handleKindleToggle);
+    uploadToDropboxCheckbox.addEventListener('change', () => {
+        handleDropboxToggle();
+        updateExportButtonText();
+    });
+    sendToKindleCheckbox.addEventListener('change', () => {
+        handleKindleToggle();
+        updateExportButtonText();
+    });
 
     /**
      * Инициализация popup
@@ -37,6 +43,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 updateDropboxStatus(),
                 updateGmailStatus()
             ]);
+
+            updateExportButtonText();
 
             // Загружаем сохраненные настройки
             await loadSettings();
@@ -54,7 +62,8 @@ document.addEventListener('DOMContentLoaded', function () {
     async function updateDropboxStatus() {
         try {
             const dropboxStatus = /** @type {HTMLDivElement} */ (document.getElementById('dropboxStatus'));
-            const isConnected = await dropboxClient.isConnected();
+            // @ts-ignore
+            const isConnected = await window.dropboxClient.isConnected();
             debugLog('Dropbox connection status', { isConnected });
 
             if (isConnected) {
@@ -130,10 +139,32 @@ document.addEventListener('DOMContentLoaded', function () {
             if (!currentTab || !currentTab.url) {
                 setStatus('⚠️ Экспорт недоступен', 'error');
                 exportBtn.disabled = true;
+                previewBtn.disabled = true;
                 return;
             }
 
-            if (currentTab.url.startsWith('chrome://') || currentTab.url.startsWith('chrome-extension://')) {
+            const url = currentTab.url;
+
+            // Добавляем проверку на ограничения безопасности
+            if (url.startsWith('https://chrome.google.com/webstore')) {
+                setStatus('⚠️ Chrome Web Store ограничивает работу всех расширений на своих страницах.', 'error');
+                exportBtn.disabled = true;
+                previewBtn.disabled = true;
+                return;
+            }
+
+            // Список запрещенных протоколов
+            const restrictedSchemes = [
+                'chrome:',
+                'chrome-extension:',
+                'about:',
+                'view-source:',
+                'edge:',
+                'devtools:',
+                'data:'
+            ];
+
+            if (restrictedSchemes.some(scheme => url.startsWith(scheme))) {
                 setStatus('⚠️ Экспорт недоступен для системных страниц', 'error');
                 exportBtn.disabled = true;
                 previewBtn.disabled = true;
@@ -144,8 +175,9 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         } catch (error) {
             console.error('Error checking export availability:', error);
-            setStatus('⚠️ Ошибка проверки страницы', 'error');
+            setStatus('⚠️ Ошибка доступа к контенту страницы. Попробуйте обновить страницу.', 'error');
             exportBtn.disabled = true;
+            previewBtn.disabled = true;
         }
     }
 
@@ -181,14 +213,15 @@ document.addEventListener('DOMContentLoaded', function () {
                 throw new Error(response?.error || 'Не удалось извлечь контент');
             }
 
-            // Шаг 3: Создание EPUB
+            // Шаг 3: Создание EPUB (и отправка в Dropbox/Kindle в фоне)
             renderWorkflowStage('epub', { dropbox: shouldUploadToDropbox, kindle: shouldSendToKindle });
             setProgress(40);
 
             const epubResponse = await chrome.runtime.sendMessage({
                 action: 'createEPUB',
                 data: response.data,
-                uploadToDropbox: shouldUploadToDropbox
+                uploadToDropbox: shouldUploadToDropbox,
+                sendToKindle: shouldSendToKindle
             });
             debugLog('EPUB generation response', epubResponse);
 
@@ -196,34 +229,30 @@ document.addEventListener('DOMContentLoaded', function () {
                 throw new Error(epubResponse?.error || 'Ошибка создания EPUB');
             }
 
-            // Шаг 4: Загрузка / Отправка
+            // Шаг 4: Визуализация завершения (Dropbox/Kindle уже обработаны в фоне)
             if (shouldUploadToDropbox) {
                 renderWorkflowStage('upload', { dropbox: shouldUploadToDropbox, kindle: shouldSendToKindle });
                 setProgress(60);
-                // Загрузка в Dropbox происходит в background.js (см. epubResponse)
             }
 
             if (shouldSendToKindle) {
                 renderWorkflowStage('kindle', { dropbox: shouldUploadToDropbox, kindle: shouldSendToKindle });
                 setProgress(shouldUploadToDropbox ? 80 : 70);
-
-                // Нам нужен сам файл для отправки
-                const fileResponse = await fetch(epubResponse.downloadUrl);
-                const fileBlob = await fileResponse.blob();
-
-                // @ts-ignore
-                await window.gmailClient.sendEmail(fileBlob, epubResponse.filename);
             }
 
             renderWorkflowStage('done', { dropbox: shouldUploadToDropbox, kindle: shouldSendToKindle });
             setProgress(100);
 
-            // Финальная загрузка файла
-            await chrome.downloads.download({
-                url: epubResponse.downloadUrl,
-                filename: epubResponse.filename
-            });
-            debugLog('Triggered download', { filename: epubResponse.filename });
+            // Финальная загрузка файла - ТОЛЬКО если не выбрана отправка на Kindle
+            if (!shouldSendToKindle) {
+                debugLog('Triggering local download');
+                await chrome.downloads.download({
+                    url: epubResponse.downloadUrl,
+                    filename: epubResponse.filename
+                });
+            } else {
+                debugLog('Skipping local download as Kindle was selected');
+            }
 
             setProgress(100);
 
@@ -234,10 +263,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
             setStatus(successMessage.join('<br>'), 'success');
 
-            // Закрываем popup через 2 секунды
+            // Закрываем popup через 3 секунды
             setTimeout(() => {
                 window.close();
-            }, 2000);
+            }, 3000);
 
         } catch (error) {
             const err = /** @type {Error} */ (error);
@@ -493,6 +522,24 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     /**
+     * Обновляет текст кнопки экспорта в зависимости от выбранных опций
+     */
+    function updateExportButtonText() {
+        const toDropbox = uploadToDropboxCheckbox.checked;
+        const toKindle = sendToKindleCheckbox.checked;
+
+        if (toDropbox && toKindle) {
+            exportBtn.textContent = 'Экспорт, Kindle и Dropbox';
+        } else if (toKindle) {
+            exportBtn.textContent = 'Экспорт и Kindle';
+        } else if (toDropbox) {
+            exportBtn.textContent = 'Экспорт и Dropbox';
+        } else {
+            exportBtn.textContent = 'Экспорт в EPUB';
+        }
+    }
+
+    /**
      * Устанавливает прогресс
      * @param {number} percent
      */
@@ -501,13 +548,31 @@ document.addEventListener('DOMContentLoaded', function () {
             progress.style.display = 'block';
             progressBar.style.width = `${percent}%`;
             exportBtn.disabled = true;
-            exportBtn.textContent = 'Экспорт...';
+            exportBtn.textContent = 'Выполняется...';
         } else {
             progress.style.display = 'none';
             progressBar.style.width = '0%';
             exportBtn.disabled = false;
-            exportBtn.textContent = 'Экспорт в EPUB';
+            updateExportButtonText();
         }
         debugLog('Progress updated', { percent });
+    }
+
+    /**
+     * Конвертирует data URL в Blob
+     * @param {string} dataUrl
+     * @returns {Promise<Blob>}
+     */
+    async function dataURLToBlob(dataUrl) {
+        const parts = dataUrl.split(',');
+        const mimeMatch = parts[0].match(/:(.*?);/);
+        const mime = mimeMatch ? mimeMatch[1] : 'application/epub+zip';
+        const bstr = atob(parts[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) {
+            u8arr[n] = bstr.charCodeAt(n);
+        }
+        return new Blob([u8arr], { type: mime });
     }
 });

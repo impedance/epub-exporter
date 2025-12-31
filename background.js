@@ -12,11 +12,17 @@ import DropboxClient from './dropbox_client.js';
 // AICODE-LINK: ./types.d.ts#ExtractedContent
 // AICODE-LINK: ./epub_generator.js#createEPUB
 
+import GmailClient from './gmail_client.js';
+
 const dropboxClient = new DropboxClient();
+const gmailClient = new GmailClient();
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'createEPUB') {
-        createEPUBFile(request.data, { uploadToDropbox: Boolean(request.uploadToDropbox) })
+        createEPUBFile(request.data, {
+            uploadToDropbox: Boolean(request.uploadToDropbox),
+            sendToKindle: Boolean(request.sendToKindle)
+        })
             .then(result => sendResponse({ success: true, ...result }))
             .catch(error => sendResponse({ success: false, error: error.message }));
         return true; // Асинхронный ответ
@@ -33,8 +39,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 /**
  * Создает EPUB файл из переданных данных.
  * @param {ExtractedContent} data
- * @param {{ uploadToDropbox?: boolean }} [options]
- * @returns {Promise<{downloadUrl: string, filename: string, dropboxPath?: string}>}
+ * @param {{ uploadToDropbox?: boolean, sendToKindle?: boolean }} [options]
+ * @returns {Promise<{downloadUrl: string, filename: string, dropboxPath?: string, kindleSent?: boolean}>}
  */
 async function createEPUBFile(data, options = {}) {
     try {
@@ -45,7 +51,6 @@ async function createEPUBFile(data, options = {}) {
 
         let dropboxPath;
         if (options.uploadToDropbox) {
-            // AICODE-NOTE: DECISION/DROPBOX-UPLOAD decision: upload immediately so users get Dropbox copy without extra steps.
             const blobSize = typeof result.blob.size === 'number' ? result.blob.size : undefined;
             console.log('[background][dropbox] upload requested', {
                 filename: result.filename,
@@ -58,10 +63,19 @@ async function createEPUBFile(data, options = {}) {
             });
         }
 
+        let kindleSent = false;
+        if (options.sendToKindle) {
+            console.log('[background][kindle] send requested', { filename: result.filename });
+            await gmailClient.sendEmail(result.blob, result.filename);
+            kindleSent = true;
+            console.log('[background][kindle] send completed');
+        }
+
         return {
             downloadUrl: result.downloadUrl,
             filename: result.filename,
-            dropboxPath
+            dropboxPath,
+            kindleSent
         };
     } catch (error) {
         const err = /** @type {Error} */ (error);

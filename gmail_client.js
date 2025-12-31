@@ -69,10 +69,11 @@ class GmailClient {
             throw new Error('Email адрес Kindle не указан');
         }
 
-        console.log(`${LOG_PREFIX} sending ${filename} to ${targetEmail}`);
+        console.log(`${LOG_PREFIX} sending ${filename} to ${targetEmail}`, { size: fileBlob.size });
 
         const boundary = 'foo_bar_baz';
         const fileData = await this.blobToBase64(fileBlob);
+        console.debug(`${LOG_PREFIX} file data converted to base64, length: ${fileData.length}`);
 
         // Формируем MIME сообщение
         const messageParts = [
@@ -98,12 +99,15 @@ class GmailClient {
         ];
 
         const rawMessage = messageParts.join('\r\n');
+        console.debug(`${LOG_PREFIX} total raw MIME message length: ${rawMessage.length}`);
 
         // Gmail API требует base64url кодирования всего сообщения
         const encodedMessage = btoa(unescape(encodeURIComponent(rawMessage)))
             .replace(/\+/g, '-')
             .replace(/\//g, '_')
             .replace(/=+$/, '');
+
+        console.debug(`${LOG_PREFIX} encoded message ready, length: ${encodedMessage.length}`);
 
         const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
             method: 'POST',
@@ -129,21 +133,19 @@ class GmailClient {
 
     /**
      * Вспомогательная функция для конвертации Blob в Base64
+     * Совместима с Service Workers (не требует FileReader)
      * @param {Blob} blob 
      * @returns {Promise<string>}
      */
     async blobToBase64(blob) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => {
-                if (typeof reader.result !== 'string') return reject(new Error('Failed to read blob'));
-                // Удаляем data:application/epub+zip;base64,
-                const base64 = reader.result.split(',')[1];
-                resolve(base64);
-            };
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-        });
+        const buffer = await blob.arrayBuffer();
+        const bytes = new Uint8Array(buffer);
+        let binary = '';
+        const len = bytes.byteLength;
+        for (let i = 0; i < len; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary);
     }
 
     /**

@@ -14,7 +14,8 @@
     "https://api.dropboxapi.com/*",
     "https://content.dropboxapi.com/*",
     "https://www.dropbox.com/*",
-    "https://www.googleapis.com/*"
+    "https://www.googleapis.com/*",
+    "https://gmail.googleapis.com/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -51,12 +52,12 @@
     }
   ],
   "oauth2": {
-    "client_id": "YOUR_GMAIL_CLIENT_ID_HERE.apps.googleusercontent.com",
+    "client_id": "325463771380-h8vfj0d85dn9g9oaaq8rqnc1ejfq5edh.apps.googleusercontent.com",
     "scopes": [
       "https://www.googleapis.com/auth/gmail.send"
     ]
   },
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; style-src 'self' 'unsafe-inline'; default-src 'self'"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; style-src 'self' 'unsafe-inline';"
   }
 }

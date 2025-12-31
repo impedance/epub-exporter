@@ -80,9 +80,11 @@ async function extractPageContent() {
     try {
         // Получаем выделенный текст
         const selection = window.getSelection();
-        // AICODE-CONTRACT: CONTRACT/SELECTION require non-empty user selection before export [2025-12-29]
+
+        // Если ничего не выделено - используем "чистое" извлечение (Readability)
         if (!selection || selection.rangeCount === 0 || selection.toString().trim() === '') {
-            throw new Error('Пожалуйста, выделите текст на странице для экспорта');
+            console.log('[content] No selection found, falling back to clean extraction');
+            return await extractCleanPageContent();
         }
 
         // Извлекаем заголовок
@@ -95,7 +97,8 @@ async function extractPageContent() {
         const images = await extractImagesFromSelection(selection);
 
         if (!content.trim()) {
-            throw new Error('Выделенный контент пуст');
+            console.log('[content] Selected content is empty, falling back to clean extraction');
+            return await extractCleanPageContent();
         }
 
         return {
