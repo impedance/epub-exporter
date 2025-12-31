@@ -30,6 +30,8 @@
         "<all_urls>"
       ],
       "js": [
+        "lib/readability.js",
+        "lib/dompurify.js",
         "content_script.js"
       ]
     }

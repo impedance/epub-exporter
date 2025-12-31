@@ -22,7 +22,7 @@ export async function extractContentFromTab(tabId) {
     if (error.message && error.message.includes('Could not establish connection')) {
       await chrome.scripting.executeScript({
         target: { tabId },
-        files: ['content_script.js']
+        files: ['lib/readability.js', 'lib/dompurify.js', 'content_script.js']
       });
       return await chrome.tabs.sendMessage(tabId, { action: 'extractContent' });
     }

@@ -15,7 +15,62 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             .catch(error => sendResponse({ success: false, error: error.message }));
         return true; // Асинхронный ответ
     }
+
+    if (request.action === 'extractCleanContent') {
+        extractCleanPageContent()
+            .then(data => sendResponse({ success: true, data }))
+            .catch(error => sendResponse({ success: false, error: error.message }));
+        return true;
+    }
 });
+
+/**
+ * Извлекает "чистый" контент страницы с использованием Readability.
+ * @returns {Promise<ExtractedContent>}
+ */
+async function extractCleanPageContent() {
+    try {
+        // @ts-ignore - Readability подгружается в контент скрипт
+        if (typeof Readability === 'undefined') {
+            throw new Error('Модуль очистки контента не загружен');
+        }
+
+        // Клонируем документ, так как Readability модифицирует его
+        const documentClone = document.cloneNode(true);
+        // @ts-ignore
+        const reader = new Readability(documentClone);
+        const article = reader.parse();
+
+        if (!article || !article.content) {
+            throw new Error('Не удалось извлечь основной контент страницы');
+        }
+
+        // Очищаем HTML от потенциально опасных тегов и атрибутов
+        // @ts-ignore - DOMPurify подгружается в контент скрипт
+        const cleanContent = typeof DOMPurify !== 'undefined'
+            ? DOMPurify.sanitize(article.content)
+            : article.content;
+
+        // Извлекаем изображения из оригинального документа (Readability может их потерять или изменить пути)
+        // Но для превью нам достаточно HTML. Для EPUB лучше использовать селекцию.
+        // Тем не менее, попытаемся найти изображения в "чистом" контенте
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = cleanContent;
+        const images = await extractImages(tempDiv);
+
+        return {
+            title: article.title || extractTitle(),
+            content: cleanContent,
+            images,
+            url: window.location.href,
+            timestamp: new Date().toISOString()
+        };
+    } catch (error) {
+        const err = /** @type {Error} */ (error);
+        console.error('Ошибка "чистого" извлечения:', err);
+        throw err;
+    }
+}
 
 /**
  * Извлекает контент страницы.
@@ -32,13 +87,13 @@ async function extractPageContent() {
 
         // Извлекаем заголовок
         let title = extractTitle();
-        
+
         // Извлекаем выделенный контент
         const content = await extractSelectedContent(selection);
-        
+
         // Извлекаем изображения из выделенного содержимого
         const images = await extractImagesFromSelection(selection);
-        
+
         if (!content.trim()) {
             throw new Error('Выделенный контент пуст');
         }
@@ -50,7 +105,7 @@ async function extractPageContent() {
             url: window.location.href,
             timestamp: new Date().toISOString()
         };
-        
+
     } catch (error) {
         const err = /** @type {Error} */ (error);
         console.error('Ошибка извлечения контента:', err);
@@ -72,14 +127,14 @@ function extractTitle() {
         '.page-title',
         'title'
     ];
-    
+
     for (const selector of titleSelectors) {
         const element = document.querySelector(selector);
         if (element && element.textContent.trim()) {
             return cleanText(element.textContent);
         }
     }
-    
+
     // Если заголовок не найден, используем title страницы
     return document.title || 'Экспортированная статья';
 }
@@ -93,14 +148,14 @@ async function extractSelectedContent(selection) {
     try {
         // Создаем временный контейнер для работы с выделенным содержимым
         const tempDiv = document.createElement('div');
-        
+
         // Копируем все выделенные range в временный контейнер
         for (let i = 0; i < selection.rangeCount; i++) {
             const range = selection.getRangeAt(i);
             const contents = range.cloneContents();
             tempDiv.appendChild(contents);
         }
-        
+
         // Обрабатываем содержимое так же, как и контейнерное содержимое
         return await extractTextContentFromElement(tempDiv);
     } catch (error) {
@@ -127,17 +182,17 @@ async function extractSelectedContent(selection) {
  */
 async function extractImagesFromSelection(selection) {
     const images = [];
-    
+
     try {
         // Создаем временный контейнер для поиска изображений
         const tempDiv = document.createElement('div');
-        
+
         for (let i = 0; i < selection.rangeCount; i++) {
             const range = selection.getRangeAt(i);
             const contents = range.cloneContents();
             tempDiv.appendChild(contents);
         }
-        
+
         // Используем существующую функцию для извлечения изображений
         return await extractImages(tempDiv);
     } catch (error) {
@@ -154,7 +209,7 @@ async function extractImagesFromSelection(selection) {
 async function extractTextContentFromElement(container) {
     // Клонируем контейнер для безопасной обработки
     const clone = /** @type {HTMLElement} */ (container.cloneNode(true));
-    
+
     // Удаляем нежелательные элементы
     const unwantedSelectors = [
         'script', 'style', 'nav', 'header', 'footer',
@@ -163,24 +218,25 @@ async function extractTextContentFromElement(container) {
         '.comments', '.related-posts', '.popup',
         '[class*="ad-"]', '[id*="ad-"]'
     ];
-    
+
     unwantedSelectors.forEach(selector => {
         const elements = clone.querySelectorAll(selector);
         elements.forEach(el => el.remove());
     });
-    
+
     // Извлекаем контент с сохранением структуры
     let formattedContent = '';
     const processedElements = new Set(); // Отслеживаем обработанные элементы
-    
+
     // Обрабатываем элементы в порядке появления в документе
     // AICODE-NOTE: DECISION/INCLUDE-IMAGES decision: include images to preserve visual context in EPUB.
     const walker = document.createTreeWalker(
         clone,
         NodeFilter.SHOW_ELEMENT,
         {
-            acceptNode: function(node) {
-                const tagName = node.tagName.toLowerCase();
+            acceptNode: function (node) {
+                const element = /** @type {Element} */ (node);
+                const tagName = element.tagName.toLowerCase();
                 if (['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'blockquote', 'pre', 'code', 'div', 'img', 'span'].includes(tagName)) {
                     return NodeFilter.FILTER_ACCEPT;
                 }
@@ -206,7 +262,7 @@ async function extractTextContentFromElement(container) {
     if (formattedContent.trim()) {
         return formattedContent;
     }
-    
+
     // Если структурированный контент не найден, извлекаем весь текст
     const allText = cleanText(clone.textContent);
     if (allText) {
@@ -214,7 +270,7 @@ async function extractTextContentFromElement(container) {
         const paragraphs = allText.split(/\n\s*\n/).filter(p => p.trim());
         return paragraphs.map(p => `<p>${p.trim()}</p>`).join('\n');
     }
-    
+
     return '';
 }
 
@@ -242,7 +298,7 @@ function isChildOfProcessedElement(element, processedElements) {
  */
 function processElement(element) {
     const tagName = element.tagName.toLowerCase();
-    
+
     switch (tagName) {
         case 'h1':
         case 'h2':
@@ -252,15 +308,15 @@ function processElement(element) {
         case 'h6':
             const headerText = cleanText(element.textContent);
             return headerText ? `<${tagName}>${headerText}</${tagName}>` : '';
-            
+
         case 'p':
             const pText = cleanText(element.textContent);
             return pText ? `<p>${pText}</p>` : '';
-            
+
         case 'blockquote':
             const quoteText = cleanText(element.textContent);
             return quoteText ? `<blockquote>${quoteText}</blockquote>` : '';
-            
+
         case 'pre':
             // Проверяем, есть ли внутри code элемент с data-highlighted
             const codeElement = element.querySelector('code[data-highlighted="yes"]');
@@ -272,7 +328,7 @@ function processElement(element) {
                 const preText = cleanText(element.textContent);
                 return preText ? `<pre><code>${preText}</code></pre>` : '';
             }
-            
+
         case 'code':
             // Обрабатываем отдельные элементы code с подсветкой синтаксиса
             if (element.getAttribute('data-highlighted') === 'yes') {
@@ -310,7 +366,7 @@ function processElement(element) {
                 return `<p>${cleanText(directText)}</p>`;
             }
             return '';
-            
+
         default:
             return '';
     }
@@ -327,7 +383,7 @@ function processList(listElement, tagName) {
     if (listItems.length === 0) {
         return '';
     }
-    
+
     let listContent = '';
     listItems.forEach(li => {
         const liText = cleanText(li.textContent);
@@ -335,11 +391,11 @@ function processList(listElement, tagName) {
             listContent += `    <li>${liText}</li>\n`;
         }
     });
-    
+
     if (listContent) {
         return `<${tagName}>\n${listContent}</${tagName}>`;
     }
-    
+
     return '';
 }
 
@@ -366,7 +422,7 @@ function getDirectTextContent(element) {
 async function extractImages(container) {
     const images = [];
     const imgElements = container.querySelectorAll('img');
-    
+
     for (let img of imgElements) {
         try {
             // AICODE-TRAP: TRAP/JSDOM-IMG-DIMS jsdom clones report zero width/height; prefer natural dimensions or attributes to avoid dropping real images [2025-08-14]
@@ -401,7 +457,7 @@ async function extractImages(container) {
             console.warn('Ошибка обработки изображения:', err);
         }
     }
-    
+
     return images;
 }
 

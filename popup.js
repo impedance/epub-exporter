@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const progress = /** @type {HTMLDivElement} */ (document.getElementById('progress'));
     const progressBar = /** @type {HTMLDivElement} */ (document.getElementById('progressBar'));
     const status = /** @type {HTMLDivElement} */ (document.getElementById('status'));
+    const previewBtn = /** @type {HTMLButtonElement} */ (document.getElementById('previewBtn'));
 
     const debugLog = (...args) => {
         console.log('[popup]', ...args);
@@ -20,6 +21,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Event Listeners
     exportBtn.addEventListener('click', handleExport);
+    previewBtn.addEventListener('click', handlePreview);
     settingsBtn.addEventListener('click', openSettings);
     uploadToDropboxCheckbox.addEventListener('change', handleDropboxToggle);
     sendToKindleCheckbox.addEventListener('change', handleKindleToggle);
@@ -134,9 +136,11 @@ document.addEventListener('DOMContentLoaded', function () {
             if (currentTab.url.startsWith('chrome://') || currentTab.url.startsWith('chrome-extension://')) {
                 setStatus('⚠️ Экспорт недоступен для системных страниц', 'error');
                 exportBtn.disabled = true;
+                previewBtn.disabled = true;
             } else {
                 setStatus('Готов к экспорту');
                 exportBtn.disabled = false;
+                previewBtn.disabled = false;
             }
         } catch (error) {
             console.error('Error checking export availability:', error);
@@ -241,6 +245,109 @@ document.addEventListener('DOMContentLoaded', function () {
             debugLog('Export flow failed', err);
             setStatus(`❌ ${err.message}`, 'error');
             setProgress(0);
+        }
+    }
+
+    /**
+     * Обработчик предпросмотра (Clean)
+     */
+    async function handlePreview() {
+        debugLog('Starting clean preview flow');
+        try {
+            setStatus('⌛ Подготовка предпросмотра...');
+            previewBtn.disabled = true;
+            exportBtn.disabled = true;
+
+            const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+            const tab = tabs[0];
+            if (!tab?.id) throw new Error('Не удалось получить текущую вкладку');
+
+            // Извлекаем "чистый" контент
+            const response = await extractCleanContentFromTab(tab.id);
+            if (!response || !response.success) {
+                throw new Error(response?.error || 'Не удалось извлечь контент');
+            }
+
+            const { title, content } = response.data;
+
+            // Создаем HTML для предпросмотра
+            const previewHtml = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <title>Предпросмотр: ${title}</title>
+                    <style>
+                        body {
+                            max-width: 800px;
+                            margin: 40px auto;
+                            padding: 0 20px;
+                            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                            line-height: 1.6;
+                            color: #333;
+                            background-color: #f9f9f9;
+                        }
+                        .container {
+                            background: white;
+                            padding: 40px;
+                            border-radius: 8px;
+                            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                        }
+                        h1 { border-bottom: 2px solid #eee; padding-bottom: 10px; }
+                        img { max-width: 100%; height: auto; display: block; margin: 20px auto; }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <h1>${title}</h1>
+                        ${content}
+                    </div>
+                </body>
+                </html>
+            `;
+
+            // Открываем новую вкладку с контентом
+            const blob = new Blob([previewHtml], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            chrome.tabs.create({ url });
+
+            setStatus('✅ Предпросмотр открыт в новой вкладке');
+
+            // Возвращаем кнопки в нормальное состояние через секунду
+            setTimeout(() => {
+                previewBtn.disabled = false;
+                exportBtn.disabled = false;
+                setStatus('Готов к экспорту');
+            }, 1000);
+
+        } catch (error) {
+            const err = /** @type {Error} */ (error);
+            console.error('Ошибка предпросмотра:', err);
+            setStatus(`❌ Ошибка: ${err.message}`, 'error');
+            previewBtn.disabled = false;
+            exportBtn.disabled = false;
+        }
+    }
+
+    /**
+     * Отправляет запрос на извлечение "чистого" контента из вкладки.
+     * @param {number} tabId
+     * @returns {Promise<{success: boolean, data?: any, error?: string}>}
+     */
+    async function extractCleanContentFromTab(tabId) {
+        try {
+            return await chrome.tabs.sendMessage(tabId, { action: 'extractCleanContent' });
+        } catch (err) {
+            const error = /** @type {Error} */ (err);
+            if (error.message && error.message.includes('Could not establish connection')) {
+                // @ts-ignore
+                await chrome.scripting.executeScript({
+                    target: { tabId },
+                    files: ['lib/readability.js', 'lib/dompurify.js', 'content_script.js']
+                });
+                return await chrome.tabs.sendMessage(tabId, { action: 'extractCleanContent' });
+            }
+            throw error;
         }
     }
 

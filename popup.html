@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,17 +14,17 @@
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
         }
-        
+
         .container {
             text-align: center;
         }
-        
+
         h1 {
             margin: 0 0 20px 0;
             font-size: 18px;
             font-weight: 600;
         }
-        
+
         .export-btn {
             background: rgba(255, 255, 255, 0.2);
             border: 2px solid rgba(255, 255, 255, 0.3);
@@ -37,19 +38,19 @@
             width: 100%;
             backdrop-filter: blur(10px);
         }
-        
+
         .export-btn:hover {
             background: rgba(255, 255, 255, 0.3);
             border-color: rgba(255, 255, 255, 0.5);
             transform: translateY(-2px);
         }
-        
+
         .export-btn:disabled {
             opacity: 0.6;
             cursor: not-allowed;
             transform: none;
         }
-        
+
         .dropbox-section {
             margin: 16px 0;
             padding: 12px;
@@ -57,14 +58,14 @@
             border-radius: 12px;
             backdrop-filter: blur(10px);
         }
-        
+
         .dropbox-option {
             display: flex;
             align-items: center;
             justify-content: center;
             margin-bottom: 10px;
         }
-        
+
         .dropbox-option label {
             display: flex;
             align-items: center;
@@ -72,26 +73,26 @@
             font-size: 14px;
             cursor: pointer;
         }
-        
+
         .dropbox-option input[type="checkbox"] {
             width: 16px;
             height: 16px;
         }
-        
+
         .dropbox-status {
             font-size: 12px;
             opacity: 0.8;
             text-align: center;
         }
-        
+
         .dropbox-status.connected {
             color: #4CAF50;
         }
-        
+
         .dropbox-status.disconnected {
             color: #FF9800;
         }
-        
+
         .progress {
             margin-top: 16px;
             height: 4px;
@@ -100,7 +101,7 @@
             overflow: hidden;
             display: none;
         }
-        
+
         .progress-bar {
             height: 100%;
             background: white;
@@ -108,14 +109,14 @@
             transition: width 0.3s ease;
             border-radius: 2px;
         }
-        
+
         .status {
             margin-top: 12px;
             font-size: 14px;
             opacity: 0.9;
             min-height: 20px;
         }
-        
+
         .error {
             color: #ffcdd2;
             background: rgba(244, 67, 54, 0.2);
@@ -124,7 +125,7 @@
             margin-top: 12px;
             font-size: 12px;
         }
-        
+
         .success {
             color: #c8e6c9;
             background: rgba(76, 175, 80, 0.2);
@@ -133,22 +134,22 @@
             margin-top: 12px;
             font-size: 12px;
         }
-        
+
         .multi-step {
             font-size: 13px;
             line-height: 1.4;
         }
-        
+
         .step {
             margin: 4px 0;
             opacity: 0.7;
         }
-        
+
         .step.active {
             opacity: 1;
             font-weight: 500;
         }
-        
+
         .step.completed {
             opacity: 0.8;
             color: #4CAF50;
@@ -198,14 +199,20 @@
             text-align: center;
         }
 
-        .kindle-status.connected { color: #4CAF50; }
-        .kindle-status.disconnected { color: #FF9800; }
+        .kindle-status.connected {
+            color: #4CAF50;
+        }
+
+        .kindle-status.disconnected {
+            color: #FF9800;
+        }
     </style>
 </head>
+
 <body>
     <div class="container">
         <h1>📚 EPUB Экспортер</h1>
-        
+
         <!-- Dropbox Section -->
         <div class="dropbox-section">
             <div class="dropbox-option">
@@ -227,24 +234,28 @@
             </div>
             <div id="kindleStatus" class="kindle-status"></div>
         </div>
-        
+
+        <button id="previewBtn" class="export-btn" style="margin-bottom: 8px; background: rgba(255, 255, 255, 0.15);">
+            Предпросмотр (Clean)
+        </button>
         <button id="exportBtn" class="export-btn">
             Экспорт в EPUB
         </button>
-        
+
         <div id="progress" class="progress">
             <div id="progressBar" class="progress-bar"></div>
         </div>
-        
+
         <div id="status" class="status"></div>
-        
+
         <button id="settingsBtn" class="settings-btn">Настройки</button>
     </div>
-    
+
     <script src="config.js"></script>
     <script type="module" src="extractContent.js"></script>
     <script type="module" src="dropbox_client.js"></script>
     <script type="module" src="gmail_client.js"></script>
     <script src="popup.js"></script>
 </body>
+
 </html>
