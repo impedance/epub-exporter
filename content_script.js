@@ -8,6 +8,22 @@
 
 /** @typedef {import('./types').ExtractedImage} ExtractedImage */
 /** @typedef {import('./types').ExtractedContent} ExtractedContent */
+
+/**
+ * Селекторы элементов, которые не должны попадать в основной контент.
+ * Включают навигацию, боковые панели, шапки, подвалы и рекламу.
+ */
+const NOISE_SELECTORS = [
+    'nav', 'header', 'footer', 'aside',
+    '.nav', '.navigation', '.menu', '.sidebar',
+    '.ads', '.advertisement', '.social-share',
+    '.comments', '.related-posts', '.popup',
+    '.devsite-book-nav', '.devsite-book-nav-wrapper',
+    '.devsite-header', '.devsite-footer', '.devsite-top-section',
+    '.skip-link', '.button-wrapper',
+    '[class*="ad-"]', '[id*="ad-"]',
+    '#sidebar', '#navigation', '#header', '#footer'
+];
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'extractContent') {
         extractPageContent()
@@ -36,7 +52,14 @@ async function extractCleanPageContent() {
         }
 
         // Клонируем документ, так как Readability модифицирует его
-        const documentClone = document.cloneNode(true);
+        const documentClone = /** @type {Document} */ (document.cloneNode(true));
+
+        // Предварительная очистка от шума перед Readability
+        NOISE_SELECTORS.forEach(selector => {
+            const elements = documentClone.querySelectorAll(selector);
+            elements.forEach(el => el.remove());
+        });
+
         // @ts-ignore
         const reader = new Readability(documentClone);
         const article = reader.parse();
@@ -214,15 +237,7 @@ async function extractTextContentFromElement(container) {
     const clone = /** @type {HTMLElement} */ (container.cloneNode(true));
 
     // Удаляем нежелательные элементы
-    const unwantedSelectors = [
-        'script', 'style', 'nav', 'header', 'footer',
-        '.nav', '.navigation', '.menu', '.sidebar',
-        '.ads', '.advertisement', '.social-share',
-        '.comments', '.related-posts', '.popup',
-        '[class*="ad-"]', '[id*="ad-"]'
-    ];
-
-    unwantedSelectors.forEach(selector => {
+    NOISE_SELECTORS.forEach(selector => {
         const elements = clone.querySelectorAll(selector);
         elements.forEach(el => el.remove());
     });
@@ -250,14 +265,15 @@ async function extractTextContentFromElement(container) {
 
     let node;
     while (node = walker.nextNode()) {
-        if (processedElements.has(node) || isChildOfProcessedElement(node, processedElements)) {
+        const element = /** @type {Element} */ (node);
+        if (processedElements.has(element) || isChildOfProcessedElement(element, processedElements)) {
             continue;
         }
 
-        const content = processElement(node);
+        const content = processElement(element);
         if (content.trim()) {
             formattedContent += content + '\n';
-            processedElements.add(node);
+            processedElements.add(element);
         }
     }
 
@@ -347,11 +363,12 @@ function processElement(element) {
             return processList(element, tagName);
 
         case 'img': {
-            const src = element.getAttribute('src') || element.getAttribute('data-src');
+            const img = /** @type {HTMLImageElement} */ (element);
+            const src = img.getAttribute('src') || img.getAttribute('data-src');
             if (!src) return '';
-            const alt = cleanText(element.getAttribute('alt') || '');
-            const width = element.getAttribute('width') || element.width;
-            const height = element.getAttribute('height') || element.height;
+            const alt = cleanText(img.getAttribute('alt') || '');
+            const width = img.getAttribute('width') || img.width;
+            const height = img.getAttribute('height') || img.height;
             // AICODE-TRAP: TRAP/IMG-ORIGINAL-SRC preserve original src so EPUB generator can map to downloaded file [2025-08-14]
             return `<img src="${src}" alt="${alt}"${width ? ` width="${width}` : ''}${width ? '"' : ''}${height ? ` height="${height}` : ''}${height ? '"' : ''}/>`;
         }
@@ -666,5 +683,7 @@ if (typeof window !== 'undefined') {
     window.getDirectTextContent = getDirectTextContent;
     window.isChildOfProcessedElement = isChildOfProcessedElement;
     window.processElement = processElement;
+    window.extractCleanPageContent = extractCleanPageContent;
+    window.extractTextContentFromElement = extractTextContentFromElement;
     window.debugExtraction = debugExtraction;
 }

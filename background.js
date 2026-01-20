@@ -2,7 +2,7 @@
 /* global chrome */
 // Background script для обработки создания EPUB файлов
 import EPUBGenerator from './epub_generator.js';
-import './config.js';
+import { MAX_IMAGE_SIZE_FOR_OPTIMIZATION, MAX_IMAGE_WIDTH, JPEG_QUALITY } from './config.js';
 import DropboxClient from './dropbox_client.js';
 
 // AICODE-NOTE: NAV/BACKGROUND entry: chrome.runtime.onMessage -> createEPUBFile ref: background.js
@@ -179,6 +179,13 @@ async function prepareImages(images = [], pageUrl = '', htmlContent = '') {
 
         if (!base64Data) {
             continue;
+        }
+
+        // Оптимизация изображения (сжатие, ресайз, конвертация GIF)
+        try {
+            base64Data = await optimizeImage(base64Data);
+        } catch (error) {
+            console.warn('Ошибка оптимизации изображения:', error);
         }
 
         const normalizedSrc = normalizeImageUrl(candidate.resolvedSrc || candidate.originalSrc, pageUrl)
@@ -409,4 +416,65 @@ function arrayBufferToBase64(buffer) {
     return btoa(binary);
 }
 
-export { prepareImages, extractImageCandidatesFromHtml };
+/**
+ * Оптимизирует изображение: сжимает, меняет размер и конвертирует анимации в статику.
+ * @param {string} dataUrl
+ * @returns {Promise<string>}
+ */
+async function optimizeImage(dataUrl) {
+    if (!dataUrl.startsWith('data:image/')) {
+        return dataUrl;
+    }
+
+    // Проверяем, нужно ли оптимизировать
+    const isGif = dataUrl.includes('image/gif');
+    const approxSize = Math.round((dataUrl.length * 3) / 4);
+    const isLarge = approxSize > MAX_IMAGE_SIZE_FOR_OPTIMIZATION;
+
+    if (!isGif && !isLarge) {
+        return dataUrl;
+    }
+
+    if (typeof OffscreenCanvas === 'undefined' || typeof createImageBitmap === 'undefined') {
+        console.warn('OffscreenCanvas не поддерживается, пропускаем оптимизацию');
+        return dataUrl;
+    }
+
+    try {
+        const blob = await (await fetch(dataUrl)).blob();
+        const imgBitmap = await createImageBitmap(blob);
+
+        let { width, height } = imgBitmap;
+
+        // Ресайз если слишком широкая
+        if (width > MAX_IMAGE_WIDTH) {
+            const ratio = MAX_IMAGE_WIDTH / width;
+            width = MAX_IMAGE_WIDTH;
+            height = Math.round(height * ratio);
+        }
+
+        const canvas = new OffscreenCanvas(width, height);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return dataUrl;
+
+        ctx.drawImage(imgBitmap, 0, 0, width, height);
+
+        // Сохраняем как JPEG (даже если был GIF или PNG)
+        const optimizedBlob = await canvas.convertToBlob({
+            type: 'image/jpeg',
+            quality: JPEG_QUALITY
+        });
+
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(/** @type {string} */(reader.result));
+            reader.onerror = reject;
+            reader.readAsDataURL(optimizedBlob);
+        });
+    } catch (error) {
+        console.error('Ошибка в optimizeImage:', error);
+        return dataUrl;
+    }
+}
+
+export { prepareImages, extractImageCandidatesFromHtml, optimizeImage };

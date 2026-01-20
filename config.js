@@ -12,6 +12,13 @@ const ENV_KEY_MAP = {
     KINDLE_EMAIL: 'KINDLE_EMAIL'
 };
 
+/** Максимальный размер изображения в байтах для оптимизации (1MB) */
+export const MAX_IMAGE_SIZE_FOR_OPTIMIZATION = 1 * 1024 * 1024;
+/** Максимальная ширина изображения в пикселях */
+export const MAX_IMAGE_WIDTH = 1200;
+/** Качество JPEG сжатия */
+export const JPEG_QUALITY = 0.8;
+
 let cachedConfigPromise = null;
 let cachedGmailConfigPromise = null;
 
