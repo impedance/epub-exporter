@@ -53,32 +53,42 @@
 
         .dropbox-section {
             margin: 16px 0;
-            padding: 12px;
+            padding: 8px; /* Slightly reduced padding */
             background: rgba(255, 255, 255, 0.15);
-            /* Increased contrast */
             border-radius: 12px;
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
-        .dropbox-option {
+        .action-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 10px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            width: 100%;
+            backdrop-filter: blur(10px);
             display: flex;
             align-items: center;
             justify-content: center;
-            margin-bottom: 10px;
-        }
-
-        .dropbox-option label {
-            display: flex;
-            align-items: center;
             gap: 8px;
-            font-size: 14px;
-            cursor: pointer;
+            margin-bottom: 8px;
         }
 
-        .dropbox-option input[type="checkbox"] {
-            width: 16px;
-            height: 16px;
+        .action-btn:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.3);
+            border-color: rgba(255, 255, 255, 0.5);
+            transform: translateY(-1px);
+        }
+
+        .action-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            filter: grayscale(1);
         }
 
         .dropbox-status {
@@ -177,28 +187,14 @@
 
         .kindle-section {
             margin: 16px 0;
-            padding: 12px;
+            padding: 8px; /* Slightly reduced padding */
             background: rgba(255, 255, 255, 0.15);
-            /* Increased contrast */
             border-radius: 12px;
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
-        .kindle-option {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 10px;
-        }
-
-        .kindle-option label {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 14px;
-            cursor: pointer;
-        }
+        /* Removed kindle-option label styles */
 
         .kindle-status {
             font-size: 11px;
@@ -225,23 +221,17 @@
 
         <!-- Dropbox Section -->
         <div class="dropbox-section">
-            <div class="dropbox-option">
-                <label for="uploadToDropbox">
-                    <input type="checkbox" id="uploadToDropbox">
-                    📁 Загрузить в Dropbox
-                </label>
-            </div>
+            <button id="uploadToDropboxBtn" class="action-btn" disabled>
+                📁 Загрузить в Dropbox
+            </button>
             <div id="dropboxStatus" class="dropbox-status"></div>
         </div>
 
         <!-- Kindle Section -->
         <div class="kindle-section">
-            <div class="kindle-option">
-                <label for="sendToKindle">
-                    <input type="checkbox" id="sendToKindle">
-                    📩 Отправить на Kindle
-                </label>
-            </div>
+            <button id="sendToKindleBtn" class="action-btn" disabled>
+                📩 Отправить на Kindle
+            </button>
             <div id="kindleStatus" class="kindle-status"></div>
         </div>
 

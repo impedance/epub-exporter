@@ -3,8 +3,8 @@
 
 document.addEventListener('DOMContentLoaded', function () {
     const exportBtn = /** @type {HTMLButtonElement} */ (document.getElementById('exportBtn'));
-    const uploadToDropboxCheckbox = /** @type {HTMLInputElement} */ (document.getElementById('uploadToDropbox'));
-    const sendToKindleCheckbox = /** @type {HTMLInputElement} */ (document.getElementById('sendToKindle'));
+    const uploadToDropboxBtn = /** @type {HTMLButtonElement} */ (document.getElementById('uploadToDropboxBtn'));
+    const sendToKindleBtn = /** @type {HTMLButtonElement} */ (document.getElementById('sendToKindleBtn'));
     const settingsBtn = /** @type {HTMLButtonElement} */ (document.getElementById('settingsBtn'));
     const progress = /** @type {HTMLDivElement} */ (document.getElementById('progress'));
     const progressBar = /** @type {HTMLDivElement} */ (document.getElementById('progressBar'));
@@ -20,17 +20,11 @@ document.addEventListener('DOMContentLoaded', function () {
     initializePopup();
 
     // Event Listeners
-    exportBtn.addEventListener('click', handleExport);
+    exportBtn.addEventListener('click', () => handleExport({ uploadToDropbox: false, sendToKindle: false }));
+    uploadToDropboxBtn.addEventListener('click', () => handleExport({ uploadToDropbox: true, sendToKindle: false }));
+    sendToKindleBtn.addEventListener('click', () => handleExport({ uploadToDropbox: false, sendToKindle: true }));
     previewBtn.addEventListener('click', handlePreview);
     settingsBtn.addEventListener('click', openSettings);
-    uploadToDropboxCheckbox.addEventListener('change', () => {
-        handleDropboxToggle();
-        updateExportButtonText();
-    });
-    sendToKindleCheckbox.addEventListener('change', () => {
-        handleKindleToggle();
-        updateExportButtonText();
-    });
 
     /**
      * Инициализация popup
@@ -43,11 +37,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 updateDropboxStatus(),
                 updateGmailStatus()
             ]);
-
-            updateExportButtonText();
-
-            // Загружаем сохраненные настройки
-            await loadSettings();
 
             // Проверяем возможность экспорта
             await checkExportAvailability();
@@ -69,12 +58,11 @@ document.addEventListener('DOMContentLoaded', function () {
             if (isConnected) {
                 dropboxStatus.textContent = '📁 Dropbox подключен';
                 dropboxStatus.className = 'dropbox-status connected';
-                uploadToDropboxCheckbox.disabled = false;
+                uploadToDropboxBtn.disabled = false;
             } else {
                 dropboxStatus.textContent = '📁 Dropbox не подключен';
                 dropboxStatus.className = 'dropbox-status disconnected';
-                uploadToDropboxCheckbox.disabled = true;
-                uploadToDropboxCheckbox.checked = false;
+                uploadToDropboxBtn.disabled = true;
             }
         } catch (error) {
             console.error('Error updating Dropbox status:', error);
@@ -94,11 +82,11 @@ document.addEventListener('DOMContentLoaded', function () {
             if (isConnected) {
                 kindleStatus.textContent = '📧 Gmail подключен';
                 kindleStatus.className = 'kindle-status connected';
-                sendToKindleCheckbox.disabled = false;
+                sendToKindleBtn.disabled = false;
             } else {
                 kindleStatus.textContent = '📧 Gmail не подключен';
                 kindleStatus.className = 'kindle-status disconnected';
-                sendToKindleCheckbox.disabled = false;
+                sendToKindleBtn.disabled = true;
             }
         } catch (error) {
             console.error('Error updating Gmail status:', error);
@@ -109,22 +97,9 @@ document.addEventListener('DOMContentLoaded', function () {
      * Загружает сохраненные настройки
      */
     async function loadSettings() {
-        try {
-            const settings = await chrome.storage.local.get(['autoUploadToDropbox', 'autoSendToKindle']);
-            debugLog('Loaded settings', settings);
-
-            // Устанавливаем чекбокс автозагрузки если Dropbox подключен
-            if (!uploadToDropboxCheckbox.disabled && settings.autoUploadToDropbox) {
-                uploadToDropboxCheckbox.checked = true;
-            }
-
-            // Устанавливаем чекбокс Kindle
-            if (settings.autoSendToKindle) {
-                sendToKindleCheckbox.checked = true;
-            }
-        } catch (error) {
-            console.error('Error loading settings:', error);
-        }
+        // Мы больше не используем авто-загрузку через чекбоксы, 
+        // так как теперь это прямые действия кнопок.
+        // Оставляем функцию пустой или удаляем, если она нигде больше не нужна.
     }
 
     /**
@@ -183,10 +158,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
     /**
      * Основная функция экспорта
+     * @param {{uploadToDropbox: boolean, sendToKindle: boolean}} options
      */
-    async function handleExport() {
-        const shouldUploadToDropbox = uploadToDropboxCheckbox.checked;
-        const shouldSendToKindle = sendToKindleCheckbox.checked;
+    async function handleExport(options) {
+        const { uploadToDropbox: shouldUploadToDropbox, sendToKindle: shouldSendToKindle } = options;
         debugLog('Starting export flow', { shouldUploadToDropbox, shouldSendToKindle });
 
         try {
@@ -268,12 +243,15 @@ document.addEventListener('DOMContentLoaded', function () {
                 window.close();
             }, 3000);
 
+            setProgress(0);
+            await checkExportAvailability(); // Re-enable buttons
         } catch (error) {
             const err = /** @type {Error} */ (error);
             console.error('Ошибка экспорта:', err);
             debugLog('Export flow failed', err);
             setStatus(`❌ ${err.message}`, 'error');
             setProgress(0);
+            await checkExportAvailability();
         }
     }
 
@@ -380,54 +358,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    /**
-     * Обрабатывает изменение чекбокса Dropbox
-     */
-    async function handleDropboxToggle() {
-        // Если пользователь включил загрузку в Dropbox, но не подключен - открываем настройки
-        if (uploadToDropboxCheckbox.checked && uploadToDropboxCheckbox.disabled) {
-            uploadToDropboxCheckbox.checked = false;
-            openSettings();
-        }
-
-        // Сохраняем настройку
-        await chrome.storage.local.set({ autoUploadToDropbox: uploadToDropboxCheckbox.checked });
-
-        debugLog('Dropbox toggle changed', {
-            checked: uploadToDropboxCheckbox.checked,
-            disabled: uploadToDropboxCheckbox.disabled
-        });
-    }
-
-    /**
-     * Обрабатывает изменение чекбокса Kindle
-     */
-    async function handleKindleToggle() {
-        if (sendToKindleCheckbox.checked) {
-            try {
-                // @ts-ignore
-                const isConnected = await window.gmailClient.isConnected();
-                if (!isConnected) {
-                    // Пытаемся авторизоваться сразу
-                    // @ts-ignore
-                    await window.gmailClient.getAccessToken(true);
-                    await updateGmailStatus();
-                }
-            } catch (error) {
-                console.error('Auth failed', error);
-                sendToKindleCheckbox.checked = false;
-                setStatus('❌ Ошибка авторизации Gmail', 'error');
-                return;
-            }
-        }
-
-        // Сохраняем настройку
-        await chrome.storage.local.set({ autoSendToKindle: sendToKindleCheckbox.checked });
-
-        debugLog('Kindle toggle changed', {
-            checked: sendToKindleCheckbox.checked
-        });
-    }
+    /* Removed handleDropboxToggle and handleKindleToggle as they used checkboxes */
 
     /**
      * Открывает страницу настроек
@@ -521,23 +452,7 @@ document.addEventListener('DOMContentLoaded', function () {
         debugLog('Multi-step status rendered', steps);
     }
 
-    /**
-     * Обновляет текст кнопки экспорта в зависимости от выбранных опций
-     */
-    function updateExportButtonText() {
-        const toDropbox = uploadToDropboxCheckbox.checked;
-        const toKindle = sendToKindleCheckbox.checked;
-
-        if (toDropbox && toKindle) {
-            exportBtn.textContent = 'Экспорт, Kindle и Dropbox';
-        } else if (toKindle) {
-            exportBtn.textContent = 'Экспорт и Kindle';
-        } else if (toDropbox) {
-            exportBtn.textContent = 'Экспорт и Dropbox';
-        } else {
-            exportBtn.textContent = 'Экспорт в EPUB';
-        }
-    }
+    /* Removed updateExportButtonText as it is no longer used */
 
     /**
      * Устанавливает прогресс
@@ -548,12 +463,14 @@ document.addEventListener('DOMContentLoaded', function () {
             progress.style.display = 'block';
             progressBar.style.width = `${percent}%`;
             exportBtn.disabled = true;
-            exportBtn.textContent = 'Выполняется...';
+            uploadToDropboxBtn.disabled = true;
+            sendToKindleBtn.disabled = true;
+            previewBtn.disabled = true;
         } else {
             progress.style.display = 'none';
             progressBar.style.width = '0%';
             exportBtn.disabled = false;
-            updateExportButtonText();
+            // updateDropboxStatus/updateGmailStatus will re-enable them correctly
         }
         debugLog('Progress updated', { percent });
     }
