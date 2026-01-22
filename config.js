@@ -2,7 +2,7 @@
 // Конфигурация для Dropbox интеграции
 // AICODE-CONTRACT: CONTRACT/DROPBOX-SECRETS load Dropbox secrets from .env so credentials never land in git history [2025-12-29]
 
-const DEFAULT_TARGET_FOLDER = '/Apps/EPUB Exporter';
+const DEFAULT_TARGET_FOLDER = '/Apps/Dropbox PocketBook';
 const ENV_KEY_MAP = {
     APP_KEY: 'DROPBOX_APP_KEY',
     APP_SECRET: 'DROPBOX_APP_SECRET',

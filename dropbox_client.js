@@ -46,14 +46,14 @@ class DropboxClient {
     async refreshAccessToken(config) {
         const url = 'https://api.dropbox.com/oauth2/token';
         console.debug(`${LOG_PREFIX} requesting token via ${url}`);
-        
+
         const formData = new URLSearchParams({
             grant_type: 'refresh_token',
             refresh_token: config.REFRESH_TOKEN
         });
 
         const auth = btoa(`${config.APP_KEY}:${config.APP_SECRET}`);
-        
+
         const response = await fetch(url, {
             method: 'POST',
             headers: {
@@ -72,7 +72,7 @@ class DropboxClient {
         const data = await response.json();
         this.accessToken = data.access_token;
         this.tokenExpiresAt = Date.now() + (data.expires_in * 1000);
-        
+
         console.debug(`${LOG_PREFIX} access token refreshed successfully`);
     }
 
@@ -128,10 +128,10 @@ class DropboxClient {
                 path,
                 bytes: fileSize ?? 'unknown'
             });
-            
+
             // Конвертируем Blob в ArrayBuffer
             const arrayBuffer = await fileBlob.arrayBuffer();
-            
+
             const response = await fetch('https://content.dropboxapi.com/2/files/upload', {
                 method: 'POST',
                 headers: {
@@ -141,7 +141,9 @@ class DropboxClient {
                         path: path,
                         mode: 'overwrite',
                         autorename: true
-                    })
+                    }).replace(/[^\x00-\x7F]/g, c =>
+                        '\\u' + ('0000' + c.charCodeAt(0).toString(16)).slice(-4)
+                    )
                 },
                 body: arrayBuffer
             });
@@ -176,7 +178,7 @@ class DropboxClient {
         try {
             console.debug(`${LOG_PREFIX} requesting user info`);
             const accessToken = await this.getAccessToken();
-            
+
             const response = await fetch('https://api.dropboxapi.com/2/users/get_current_account', {
                 method: 'POST',
                 headers: {
