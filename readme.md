@@ -17,6 +17,8 @@
 - `popup.html` / `popup.js` — UI flow; `rg -n "export" popup.js`
 - `dropbox_client.js` / `gmail_client.js` / `config.js` — Dropbox/Gmail upload + config; `rg -n "Dropbox|Gmail" dropbox_client.js gmail_client.js config.js`
 - `test/` — test suites and guidance; `rg -n "Running Tests" test/README.md`
+- `test/core/` — 80/20 contract suite; `rg -n "Core suite" test/README.md`
+- `test/full/` — extended regression suite
 - `docs/` — context, status, decisions, templates
 - `scripts/` — repo tooling (AICODE linter)
 
@@ -32,6 +34,8 @@
 ## Common tasks
 - `npm run lint:aicode`
 - `npm test`
+- `npm run test:core`
+- `npm run test:full`
 - `npm run test:verbose`
 - `npm run test:functions`
 - `npm run typecheck`

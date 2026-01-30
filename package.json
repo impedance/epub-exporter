@@ -5,9 +5,11 @@
   "main": "background.js",
   "scripts": {
     "lint:aicode": "bash scripts/lint-aicode.sh",
-    "test": "node --test",
+    "test": "node --test test/core/*.test.mjs",
+    "test:core": "node --test test/core/*.test.mjs",
+    "test:full": "node --test test/core/*.test.mjs test/full/*.test.mjs",
     "test:verbose": "node test_runner.js",
-    "test:functions": "node --test test/content_functions.test.mjs",
+    "test:functions": "node --test test/core/epub_generator_helpers.test.mjs",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [],

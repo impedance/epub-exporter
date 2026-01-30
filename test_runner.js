@@ -46,16 +46,23 @@ function runTests(testFiles) {
 async function main() {
     const testSuites = [
         {
-            name: 'Core Functionality Tests',
-            files: ['test/content_functions.test.mjs']
+            name: 'Core Contract Tests',
+            files: [
+                'test/core/pocketbook_xhtml_contract.test.mjs',
+                'test/core/pocketbook_output_contract.test.mjs',
+                'test/core/pocketbook_chapter_split.test.mjs'
+            ]
         },
         {
-            name: 'EPUB Generator Tests', 
-            files: ['test/epub_generator.test.mjs']
+            name: 'Selection + Manifest Tests', 
+            files: [
+                'test/core/extractContent.test.mjs',
+                'test/core/manifest.test.mjs'
+            ]
         },
         {
-            name: 'Integration Tests',
-            files: ['extractContent.test.mjs', 'test/manifest.test.mjs']
+            name: 'Critical Helper Tests',
+            files: ['test/core/epub_generator_helpers.test.mjs']
         }
     ];
 
@@ -99,13 +106,11 @@ async function main() {
     if (allPassed && totalFailed === 0) {
         console.log('\n🎉 All tests passed! The selection-based EPUB exporter is ready to use.');
         console.log('\n📝 Key features tested:');
-        console.log('   • Text selection validation');
-        console.log('   • Content extraction from selections');
-        console.log('   • HTML structure preservation');
-        console.log('   • Error handling for edge cases');
-        console.log('   • Title extraction priority');
-        console.log('   • Image processing and filtering');
-        console.log('   • EPUB generation and formatting');
+        console.log('   • XHTML contract validation');
+        console.log('   • EPUB packaging + manifest integrity');
+        console.log('   • Chapter splitting navigation');
+        console.log('   • Selection-only extraction');
+        console.log('   • Sanitizer + image input filtering');
     } else {
         console.log('\n⚠️  Some tests failed. Please review the output above.');
         process.exit(1);
