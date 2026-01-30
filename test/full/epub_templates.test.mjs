@@ -7,7 +7,7 @@ import {
   getTocNcxTemplate,
   getChapterXhtmlTemplate,
   getStylesTemplate
-} from '../epub/templates/index.js';
+} from '../../epub/templates/index.js';
 
 test('mimetype template returns EPUB media type string', () => {
   const mimetype = getMimetypeTemplate();

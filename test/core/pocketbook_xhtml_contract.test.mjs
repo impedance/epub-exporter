@@ -4,15 +4,15 @@ import {
   loadZipFromFile,
   readZipText,
   validateXhtmlContract
-} from './helpers/epub_contract.mjs';
+} from '../helpers/epub_contract.mjs';
 
 const badFixtures = [
-  new URL('../sample/_2__2026-01-30.epub', import.meta.url),
-  new URL('../sample/Everyone_should_be_using_Claude_Code_more_2026-01-22 (1).epub', import.meta.url),
-  new URL('../sample/MCP_Tool_Registry_RAG_2026-01-22 (2).epub', import.meta.url)
+  new URL('../../sample/_2__2026-01-30.epub', import.meta.url),
+  new URL('../../sample/Everyone_should_be_using_Claude_Code_more_2026-01-22 (1).epub', import.meta.url),
+  new URL('../../sample/MCP_Tool_Registry_RAG_2026-01-22 (2).epub', import.meta.url)
 ];
 
-const goodFixture = new URL('../sample/pocketbook_control.epub', import.meta.url);
+const goodFixture = new URL('../../sample/pocketbook_control.epub', import.meta.url);
 
 test('problem EPUB fixtures fail PocketBook XHTML contract checks', async () => {
   for (const fixture of badFixtures) {

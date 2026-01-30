@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import EPUBGenerator from '../epub_generator.js';
+import EPUBGenerator from '../../epub_generator.js';
 import {
   collectImageRefsFromXhtml,
   collectManifestHrefs,
   listZipImageEntries,
   validateXhtmlContract
-} from './helpers/epub_contract.mjs';
+} from '../helpers/epub_contract.mjs';
 
 const JSZip = globalThis.JSZip;
 
@@ -23,7 +23,7 @@ test('EPUB output meets PocketBook XHTML contract and image manifest rules', asy
   URL.createObjectURL = undefined;
 
   try {
-    const dirtyHtml = await readFixture('./fixtures/pocketbook_dirty.html');
+    const dirtyHtml = await readFixture('../fixtures/pocketbook_dirty.html');
     const pixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/w8AAuMB9WcfHhAAAAAASUVORK5CYII=';
 
     const generator = new EPUBGenerator();

@@ -118,7 +118,7 @@ async function loadContentScript(dom) {
     const fs = await import('fs');
     const path = await import('path');
     const __dirname = path.dirname(new URL(import.meta.url).pathname);
-    const contentScriptPath = path.join(__dirname, '../content_script.js');
+    const contentScriptPath = path.join(__dirname, '../../content_script.js');
     const contentScript = fs.readFileSync(contentScriptPath, 'utf8');
     
     // Remove Chrome-specific code for testing and create a testable version

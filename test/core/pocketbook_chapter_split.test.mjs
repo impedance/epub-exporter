@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import EPUBGenerator from '../epub_generator.js';
+import EPUBGenerator from '../../epub_generator.js';
 
 const JSZip = globalThis.JSZip;
 

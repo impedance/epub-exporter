@@ -4,23 +4,29 @@ This directory contains comprehensive tests for the selection-based EPUB exporte
 
 ## Test Structure
 
-- **`content_functions.test.mjs`** - Tests for individual content extraction functions
-- **`epub_generator.test.mjs`** - Tests for EPUB generation utilities  
+### Core suite (`test/core/`)
+- **`extractContent.test.mjs`** - Selection-only extraction flow
 - **`manifest.test.mjs`** - Validation for Chrome extension manifest
-- **`content_script.test.mjs`** - Integration tests (currently disabled due to DOM complexity)
-- **`selection_edge_cases.test.mjs`** - Edge case tests (currently disabled due to DOM complexity)
+- **`pocketbook_xhtml_contract.test.mjs`** - XHTML contract on real EPUB fixtures
+- **`pocketbook_output_contract.test.mjs`** - End-to-end EPUB output contract (black box)
+- **`pocketbook_chapter_split.test.mjs`** - Chapter splitting updates OPF/NCX
+- **`epub_generator_helpers.test.mjs`** - Minimal helper coverage (sanitizer + image filtering)
+
+### Full suite (`test/full/`)
+- DOM-heavy, UI, and feature-adjacent tests kept for deeper regression checks.
+- Run only when needed (longer, more coupled to implementation details).
 
 ## Running Tests
 
 ```bash
-# Run all tests
+# Run core suite (default)
 npm test
+
+# Run full suite (core + full)
+npm run test:full
 
 # Run verbose test suite with summary
 npm run test:verbose
-
-# Run only core function tests
-npm run test:functions
 
 # Run type checking
 npm run typecheck
@@ -30,41 +36,16 @@ npm run typecheck
 
 The test suite covers:
 
-✅ **Text Selection Validation**
-- Null/empty selection handling
-- Whitespace-only selections
-- Valid text selection detection
-
-✅ **Content Processing**
-- HTML element processing (h1-h6, p, blockquote, etc.)
-- Text cleaning and normalization  
-- Multi-paragraph text splitting
-- Image size filtering
-
-✅ **Title Extraction**
-- Priority-based title selection
-- Fallback to document title
-- Default title when none found
-
-✅ **Error Handling**
-- Russian error messages
-- Empty content validation
-- Graceful failure modes
-
-✅ **EPUB Generation**
-- File structure creation
-- Content sanitization
-- Image processing
-- Filename generation
+✅ **Core Coverage**
+- Selection-only extraction flow
+- XHTML contract enforcement and sanitization outputs
+- EPUB packaging contract (zip entries + manifest)
+- Chapter splitting / navigation updates
+- Manifest JSON validity
 
 ## Test Philosophy
 
-Tests are written to validate the core functionality that changed when migrating from container-based extraction (`.step-dynamic-container`) to selection-based extraction. The focus is on:
-
-1. **Behavioral validation** - Ensuring functions work correctly with different inputs
-2. **Error boundary testing** - Validating proper error handling
-3. **Edge case coverage** - Testing unusual but possible scenarios
-4. **Integration validation** - Ensuring components work together
+Tests prioritize black-box output contracts and a small set of fragile helper checks. Implementation-heavy tests live in the full suite for deeper investigations.
 
 ## Dependencies
 

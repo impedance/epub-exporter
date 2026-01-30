@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const contentScriptPath = path.join(__dirname, '../content_script.js');
+const contentScriptPath = path.join(__dirname, '../../content_script.js');
 const contentScript = fs.readFileSync(contentScriptPath, 'utf8');
 
 // Mock DOM environment for content script testing

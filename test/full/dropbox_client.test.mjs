@@ -13,7 +13,7 @@ const DROPBOX_CONFIG = {
 globalThis.DROPBOX_CONFIG = DROPBOX_CONFIG;
 
 // Dynamic import after setting globals
-const { default: DropboxClient } = await import('../dropbox_client.js');
+const { default: DropboxClient } = await import('../../dropbox_client.js');
 
 test('isConnected should exist and return boolean', async (t) => {
     const client = new DropboxClient();

@@ -22,7 +22,7 @@ test('prepareImages downloads images referenced only in HTML', async () => {
     }
   };
 
-  const { prepareImages } = await import('../background.js');
+  const { prepareImages } = await import('../../background.js');
 
   globalThis.fetch = async () => ({
     ok: true,

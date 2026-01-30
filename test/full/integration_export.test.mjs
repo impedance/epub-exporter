@@ -4,7 +4,7 @@ import { JSDOM } from 'jsdom';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 
-const popupPath = new URL('../popup.html', import.meta.url);
+const popupPath = new URL('../../popup.html', import.meta.url);
 const popupHtmlRaw = await readFile(popupPath, 'utf8');
 
 // Очищаем HTML от скриптов для ручной загрузки в VM
@@ -23,7 +23,7 @@ async function loadPopup({
         pretendToBeVisual: true
     });
 
-    const script = await readFile(new URL('../popup.js', import.meta.url), 'utf8');
+    const script = await readFile(new URL('../../popup.js', import.meta.url), 'utf8');
 
     const tabsQuery = async () => [{ id: 42, url: tabUrl }];
     const runtimeSendMessageCalls = [];

@@ -28,7 +28,7 @@ globalThis.unescape = (str) => {
 
 
 // Dynamic import
-const { default: GmailClient } = await import('../gmail_client.js');
+const { default: GmailClient } = await import('../../gmail_client.js');
 
 test('GmailClient initialization', () => {
     const client = new GmailClient();

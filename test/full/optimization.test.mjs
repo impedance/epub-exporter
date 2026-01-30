@@ -10,7 +10,7 @@ globalThis.chrome = {
     }
 };
 
-const { optimizeImage } = await import('../background.js');
+const { optimizeImage } = await import('../../background.js');
 
 test('optimizeImage skips non-image data URLs', async () => {
     const dataUrl = 'data:text/plain;base64,SGVsbG8=';
