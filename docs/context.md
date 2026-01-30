@@ -9,6 +9,7 @@ Export user-selected web content into clean EPUB files optimized for PocketBook 
 
 ## Users and UX Goals
 - Readers who want offline, distraction-free versions of web articles.
+- Primary target device in use: PocketBook e-readers (active user testing).
 - Simple flow: select content on a page -> click extension -> download EPUB (optional Dropbox copy).
 - Preserve readability (headings, lists, quotes, code, images) with safe fallbacks.
 
