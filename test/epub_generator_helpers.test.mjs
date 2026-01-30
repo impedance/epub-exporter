@@ -7,6 +7,7 @@ import {
   sanitizeImageInputs,
   decodeBase64Image
 } from '../epub/assets.js';
+import { sanitizeXhtml } from '../epub/sanitize_xhtml.js';
 
 test('image helpers detect extensions and media types', () => {
   const png = getImageExtension('data:image/png;base64,foo');
@@ -78,6 +79,68 @@ test('generateChapterXHTML rewrites image sources based on manifest entries', ()
   assert.ok(
     !chapter.includes('https://example.com/assets/image.png'),
     'Original image reference should be replaced'
+  );
+});
+
+test('normalizePocketbookXhtml flattens widget elements into text', () => {
+  const generator = new EPUBGenerator();
+  const html = '<div><label>Pick</label><input type="text"/><button>Go <strong>now</strong></button><select><option>One</option></select></div>';
+  const sanitized = generator.normalizePocketbookXhtml(html);
+
+  assert.ok(!sanitized.includes('<input'), 'Input controls should be removed');
+  assert.match(sanitized, /<span class="widget-text">Pick<\/span>/);
+  assert.match(sanitized, /<span class="widget-text">Go now<\/span>/);
+  assert.match(sanitized, /<p class="widget-text">One<\/p>/);
+});
+
+test('sanitizeXhtml removes PocketBook triggers and reports changes', () => {
+  const html = [
+    '<picture>',
+    '<source srcset="hero.webp"/>',
+    '<img src="hero.png">',
+    '</picture>',
+    '<svg><path/></svg>',
+    '<figure><img src="figure.png"></figure>',
+    '<figcaption>Caption</figcaption>',
+    '<br>',
+    '<hr>'
+  ].join('');
+  const { xhtml, report } = sanitizeXhtml(html);
+
+  assert.ok(!xhtml.includes('<picture'), 'Picture wrapper should be removed');
+  assert.ok(!xhtml.includes('<source'), 'Source tags should be removed');
+  assert.ok(!xhtml.includes('<svg'), 'Inline SVG should be removed');
+  assert.match(xhtml, /<div><img src="figure\.png"><\/div>/, 'Figure should become div');
+  assert.match(xhtml, /<p class="caption">Caption<\/p>/, 'Figcaption should become caption paragraph');
+  assert.match(xhtml, /<br \/>/, 'br should be self-closed');
+  assert.match(xhtml, /<hr \/>/, 'hr should be self-closed');
+
+  assert.equal(report.pictureReplaced, 1);
+  assert.equal(report.sourceRemoved, 1);
+  assert.equal(report.svgRemoved, 1);
+  assert.equal(report.figureConverted, 1);
+  assert.equal(report.figcaptionConverted, 1);
+  assert.equal(report.brNormalized, 1);
+  assert.equal(report.hrNormalized, 1);
+});
+
+test('contract validator can short-circuit chapter generation when enabled', () => {
+  const generator = new EPUBGenerator({
+    enableContractChecks: true,
+    contractValidator: () => ['forced']
+  });
+  const bookData = {
+    title: 'Validator Test',
+    content: '<p>Ok</p>',
+    url: '',
+    id: 'book-1',
+    uuid: 'book-1',
+    timestamp: '2026-01-30T00:00:00.000Z'
+  };
+
+  assert.throws(
+    () => generator.buildChapterEntries(bookData, []),
+    /PocketBook XHTML contract failed/
   );
 });
 

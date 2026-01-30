@@ -59,6 +59,22 @@ function createMockDOM(htmlContent = '') {
     return dom;
 }
 
+function installReadability(dom, { title = 'Clean Title', content = '<p>Clean content</p>' } = {}) {
+    const MockReadability = class {
+        constructor() {}
+        parse() {
+            return { title, content };
+        }
+    };
+    dom.window.Readability = MockReadability;
+    global.Readability = MockReadability;
+    const domPurify = {
+        sanitize: (html) => html
+    };
+    dom.window.DOMPurify = domPurify;
+    global.DOMPurify = domPurify;
+}
+
 // Mock Selection API
 function createMockSelection(text, htmlContent = null) {
     const dom = createMockDOM(htmlContent || `<p>${text}</p>`);
@@ -206,18 +222,15 @@ test('extractSelectedContent captures span-wrapped paragraphs', async (t) => {
     assert.ok(result.includes('<ul'));
 });
 
-test('extractPageContent throws error when no text is selected', async (t) => {
+test('extractPageContent falls back to clean extraction when no text is selected', async (t) => {
     const errorMock = t.mock.method(console, 'error', () => {});
     const { dom } = createMockSelection(''); // Empty selection
     await loadContentScript(dom);
+    installReadability(dom, { title: 'Clean Title', content: '<p>Fallback</p>' });
     
-    await assert.rejects(
-        dom.window.extractPageContent(),
-        {
-            name: 'Error',
-            message: 'Пожалуйста, выделите текст на странице для экспорта'
-        }
-    );
+    const result = await dom.window.extractPageContent();
+    assert.equal(result.title, 'Clean Title');
+    assert.ok(result.content.includes('Fallback'));
     errorMock.mock.restore();
 });
 

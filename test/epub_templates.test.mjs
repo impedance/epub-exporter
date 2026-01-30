@@ -26,13 +26,14 @@ test('content.opf template exposes required placeholders', () => {
   assert.match(opf, /<dc:title>{{TITLE}}<\/dc:title>/);
   assert.match(opf, /<dc:date>{{TIMESTAMP}}<\/dc:date>/);
   assert.match(opf, /<manifest>{{MANIFEST}}/);
+  assert.match(opf, /<spine toc="ncx">[\s\S]*{{SPINE}}/);
 });
 
 test('toc.ncx template includes book metadata placeholders', () => {
   const toc = getTocNcxTemplate();
   assert.match(toc, /<meta name="dtb:uid" content="{{BOOK_ID}}"/);
   assert.match(toc, /<text>{{TITLE}}<\/text>/);
-  assert.match(toc, /<content src="chapter1.xhtml"\/>/);
+  assert.match(toc, /<navMap>[\s\S]*{{NAV_POINTS}}/);
 });
 
 test('chapter template includes title and content placeholders', () => {

@@ -26,8 +26,15 @@ async function loadPopup({
     const script = await readFile(new URL('../popup.js', import.meta.url), 'utf8');
 
     const tabsQuery = async () => [{ id: 42, url: tabUrl }];
-    const runtimeSendMessage = async () => createEPUBResponse;
-    const downloadsDownload = async () => { };
+    const runtimeSendMessageCalls = [];
+    const runtimeSendMessage = async (message) => {
+        runtimeSendMessageCalls.push(message);
+        return createEPUBResponse;
+    };
+    const downloadsCalls = [];
+    const downloadsDownload = async (options) => {
+        downloadsCalls.push(options);
+    };
 
     const storage = {
         autoUploadToDropbox: autoUploadDropbox,
@@ -111,33 +118,53 @@ async function loadPopup({
         window: dom.window,
         chrome,
         gmailSendCalls,
+        downloadsCalls,
+        runtimeSendMessageCalls,
         storage
     };
 }
 
+function waitForStatus(window, matcher) {
+    return new Promise((resolve, reject) => {
+        const status = window.document.getElementById('status');
+        if (matcher(status.innerHTML)) {
+            resolve(status.innerHTML);
+            return;
+        }
+        const observer = new window.MutationObserver(() => {
+            if (matcher(status.innerHTML)) {
+                observer.disconnect();
+                resolve(status.innerHTML);
+            }
+        });
+        observer.observe(status, { childList: true, subtree: true, characterData: true });
+        setTimeout(() => {
+            observer.disconnect();
+            reject(new Error('Timed out waiting for status update'));
+        }, 500);
+    });
+}
+
 test('regression: export workflow without Dropbox/Kindle still works', async () => {
-    const { window } = await loadPopup({ dropboxConnected: false, gmailConnected: false });
+    const { window, downloadsCalls } = await loadPopup({ dropboxConnected: false, gmailConnected: false });
     const exportBtn = window.document.getElementById('exportBtn');
-    const status = window.document.getElementById('status');
 
     exportBtn.click();
-    await new Promise(r => setTimeout(r, 100));
+    await waitForStatus(window, (value) => /EPUB файл успешно создан/.test(value));
 
-    assert.match(status.innerHTML, /EPUB файл успешно создан/);
+    assert.ok(downloadsCalls.length === 1, 'download should be triggered');
 });
 
-test('feature: export workflow with Kindle works', async () => {
-    const { window, gmailSendCalls } = await loadPopup({ gmailConnected: true });
-    const sendToKindleCheckbox = window.document.getElementById('sendToKindle');
-    const exportBtn = window.document.getElementById('exportBtn');
+test('feature: export workflow with Kindle requests background send', async () => {
+    const { window, runtimeSendMessageCalls } = await loadPopup({ gmailConnected: true });
+    const sendToKindleBtn = window.document.getElementById('sendToKindleBtn');
 
-    sendToKindleCheckbox.checked = true;
-    exportBtn.click();
+    sendToKindleBtn.click();
 
-    await new Promise(r => setTimeout(r, 100));
+    await waitForStatus(window, (value) => /Отправлен на Kindle/.test(value));
 
-    assert.equal(gmailSendCalls.length, 1, 'Gmail sendEmail should be called');
-    assert.match(window.document.getElementById('status').innerHTML, /Отправлен на Kindle/);
+    assert.equal(runtimeSendMessageCalls.length, 1, 'Background should be asked to create EPUB');
+    assert.equal(runtimeSendMessageCalls[0].sendToKindle, true);
 });
 
 test('regression: Dropbox status is still correctly initialized', async () => {

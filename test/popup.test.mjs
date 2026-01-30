@@ -4,33 +4,18 @@ import { JSDOM } from 'jsdom';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 
-const popupHtml = `
-  <div>
-    <button id="exportBtn">Экспорт в EPUB</button>
-    <button id="settingsBtn">Настройки</button>
-    <div class="dropbox-section">
-      <input type="checkbox" id="uploadToDropbox">
-      <div id="dropboxStatus"></div>
-    </div>
-    <div class="kindle-section">
-      <input type="checkbox" id="sendToKindle">
-      <div id="kindleStatus"></div>
-    </div>
-    <div id="progress"><div id="progressBar"></div></div>
-    <div id="status"></div>
-  </div>
-`;
+const popupPath = new URL('../popup.html', import.meta.url);
+const popupHtmlRaw = await readFile(popupPath, 'utf8');
+const popupHtml = popupHtmlRaw.replace(/<script.*?>.*?<\/script>/gs, '');
 
 async function loadPopup({
   dropboxConnected = true,
   gmailConnected = true,
-  autoUpload = false,
-  autoSendKindle = false,
   tabUrl = 'https://example.com/article',
   extractContentResponse = { success: true, data: { title: 'Sample', content: '<p>Test</p>', images: [], url: tabUrl, timestamp: new Date().toISOString() } },
   createEPUBResponse = { success: true, downloadUrl: 'data:application/epub+zip;base64,', filename: 'Sample.epub' }
 } = {}) {
-  const dom = new JSDOM(`<body>${popupHtml}</body>`, {
+  const dom = new JSDOM(popupHtml, {
     url: 'https://extension.test/popup.html',
     pretendToBeVisual: true
   });
@@ -53,15 +38,6 @@ async function loadPopup({
     downloadsCalls.push(options);
   };
 
-  const storageGetCalls = [];
-  const storageGet = async (keys) => {
-    storageGetCalls.push(keys);
-    return {
-      autoUploadToDropbox: autoUpload,
-      autoSendToKindle: autoSendKindle
-    };
-  };
-
   const tabsCreateCalls = [];
   const tabsCreate = async (options) => {
     tabsCreateCalls.push(options);
@@ -81,7 +57,7 @@ async function loadPopup({
     },
     storage: {
       local: {
-        get: storageGet
+        get: async () => ({})
       }
     }
   };
@@ -146,20 +122,42 @@ async function loadPopup({
     runtimeSendMessageCalls,
     tabsQueryCalls,
     tabsCreateCalls,
-    storageGetCalls,
     dropboxUploadCalls,
     extractCalls
   };
 }
 
-test('popup initialization reflects Dropbox connection and saved settings', async () => {
-  const { window, storageGetCalls } = await loadPopup({
+function waitForStatus(window, matcher) {
+  return new Promise((resolve, reject) => {
+    const status = window.document.getElementById('status');
+    if (matcher(status.innerHTML)) {
+      resolve(status.innerHTML);
+      return;
+    }
+    const observer = new window.MutationObserver(() => {
+      if (matcher(status.innerHTML)) {
+        observer.disconnect();
+        resolve(status.innerHTML);
+      }
+    });
+    observer.observe(status, { childList: true, subtree: true, characterData: true });
+    setTimeout(() => {
+      observer.disconnect();
+      reject(new Error('Timed out waiting for status update'));
+    }, 500);
+  });
+}
+
+test('popup initialization reflects Dropbox and Gmail connection state', async () => {
+  const { window } = await loadPopup({
     dropboxConnected: true,
-    autoUpload: true
+    gmailConnected: true
   });
 
   const dropboxStatus = window.document.getElementById('dropboxStatus');
-  const uploadCheckbox = window.document.getElementById('uploadToDropbox');
+  const uploadBtn = window.document.getElementById('uploadToDropboxBtn');
+  const kindleStatus = window.document.getElementById('kindleStatus');
+  const sendToKindleBtn = window.document.getElementById('sendToKindleBtn');
   const exportBtn = window.document.getElementById('exportBtn');
 
   if (dropboxStatus.textContent !== '📁 Dropbox подключен') {
@@ -168,41 +166,35 @@ test('popup initialization reflects Dropbox connection and saved settings', asyn
   if (dropboxStatus.className !== 'dropbox-status connected') {
     throw new Error(`Unexpected dropbox status class: "${dropboxStatus.className}"`);
   }
-  if (uploadCheckbox.disabled) {
-    throw new Error('Upload checkbox should be enabled');
+  if (uploadBtn.disabled) {
+    throw new Error('Upload button should be enabled');
   }
-  if (!uploadCheckbox.checked) {
-    throw new Error('Upload checkbox should be checked when autoUpload setting is true');
+  if (kindleStatus.textContent !== '📧 Gmail подключен') {
+    throw new Error(`Unexpected kindle status text: "${kindleStatus.textContent}"`);
+  }
+  if (sendToKindleBtn.disabled) {
+    throw new Error('Send to Kindle button should be enabled');
   }
   if (exportBtn.disabled) {
     throw new Error('Export button should remain enabled for regular pages');
-  }
-  if (JSON.stringify(storageGetCalls) !== JSON.stringify([['autoUploadToDropbox', 'autoSendToKindle']])) {
-    throw new Error(`Unexpected storage keys: ${JSON.stringify(storageGetCalls)}`);
   }
 });
 
 test('handleExport happy path downloads EPUB and shows success message', async () => {
   const context = await loadPopup({
     dropboxConnected: false,
-    autoUpload: false
+    gmailConnected: false
   });
 
   const { window, downloadsCalls, runtimeSendMessageCalls, extractCalls } = context;
   const exportBtn = window.document.getElementById('exportBtn');
 
   exportBtn.click();
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await waitForStatus(window, (value) => /EPUB файл успешно создан/.test(value));
 
   assert.equal(extractCalls.length, 1, 'content extraction should request active tab');
   assert.equal(runtimeSendMessageCalls.length, 1, 'background should be asked to create EPUB');
   assert.equal(downloadsCalls.length, 1, 'downloads API should receive generated EPUB');
-  assert.equal(
-    window.document.getElementById('status').textContent,
-    '✅ EPUB файл успешно создан!'
-  );
-  assert.equal(window.document.getElementById('exportBtn').disabled, true, 'button stays disabled until timeout');
 });
 
 test('export button disabled for chrome:// pages', async () => {

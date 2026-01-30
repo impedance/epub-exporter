@@ -64,4 +64,4 @@ For details, follow `docs/aicode-anchors.md`.
 - Updated/removed affected anchors
 - README index refreshed if structure/entry points changed
 - `docs/status.md` updated if focus/plan changed
-- Checks run: `npm run lint:aicode` + repo tests (or closest equivalent)
+- Checks run after each change: `npm run lint:aicode` + repo tests (or closest equivalent)

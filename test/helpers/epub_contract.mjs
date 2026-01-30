@@ -1,13 +1,48 @@
-import '../../jszip.min.js';
 import { readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import { readFile as readFileRaw } from 'node:fs/promises';
+import vm from 'node:vm';
 import { JSDOM } from 'jsdom';
 
-const JSZip = globalThis.JSZip;
+let JSZipInstance = globalThis.JSZip;
+const require = createRequire(import.meta.url);
 
-export async function loadZipFromFile(fileUrl) {
-  if (!JSZip) {
+async function ensureJSZip() {
+  if (JSZipInstance) {
+    return JSZipInstance;
+  }
+  try {
+    const module = require('../../jszip.min.js');
+    JSZipInstance = module?.default || module?.JSZip || module;
+  } catch (error) {
+    // ignore require errors, fallback to VM eval
+  }
+  const isValid = JSZipInstance && typeof JSZipInstance.loadAsync === 'function';
+  if (!isValid) {
+    const source = await readFileRaw(new URL('../../jszip.min.js', import.meta.url), 'utf8');
+    const context = {
+      globalThis,
+      global: globalThis,
+      window: globalThis,
+      self: globalThis,
+      Buffer,
+      process,
+      setImmediate,
+      clearImmediate,
+      setTimeout,
+      clearTimeout
+    };
+    vm.runInNewContext(source, context);
+    JSZipInstance = globalThis.JSZip;
+  }
+  if (!JSZipInstance) {
     throw new Error('JSZip is not available on globalThis');
   }
+  return JSZipInstance;
+}
+
+export async function loadZipFromFile(fileUrl) {
+  const JSZip = await ensureJSZip();
   const buffer = await readFile(fileUrl);
   return JSZip.loadAsync(buffer);
 }
