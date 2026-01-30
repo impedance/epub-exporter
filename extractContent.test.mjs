@@ -16,5 +16,8 @@ test('injects content script when missing', async (t) => {
   const result = await extractContentFromTab(123);
   assert.deepEqual(result, { success: true });
   assert.equal(sendMessage.mock.callCount(), 2);
-  assert.deepEqual(executeScript.mock.calls[0].arguments[0], { target: { tabId: 123 }, files: ['content_script.js'] });
+  assert.deepEqual(executeScript.mock.calls[0].arguments[0], {
+    target: { tabId: 123 },
+    files: ['lib/readability.js', 'lib/dompurify.js', 'content_script.js']
+  });
 });

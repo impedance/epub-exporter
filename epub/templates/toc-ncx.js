@@ -12,12 +12,7 @@ export function getTocNcxTemplate() {
         <text>{{TITLE}}</text>
     </docTitle>
     <navMap>
-        <navPoint id="navpoint-1" playOrder="1">
-            <navLabel>
-                <text>{{TITLE}}</text>
-            </navLabel>
-            <content src="chapter1.xhtml"/>
-        </navPoint>
+{{NAV_POINTS}}
     </navMap>
 </ncx>`;
 }

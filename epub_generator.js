@@ -20,6 +20,7 @@ import {
     getImageMediaType,
     decodeBase64Image
 } from './epub/assets.js';
+import { sanitizeXhtml } from './epub/sanitize_xhtml.js';
 
 /**
  * @typedef {typeof JSZip} JSZipConstructor
@@ -48,7 +49,7 @@ import {
  */
 
 class EPUBGenerator {
-    constructor() {
+    constructor(options = {}) {
         this.templates = {
             mimetype: getMimetypeTemplate(),
             containerXML: getContainerTemplate(),
@@ -56,6 +57,10 @@ class EPUBGenerator {
             tocNCX: getTocNcxTemplate(),
             chapterXHTML: getChapterXhtmlTemplate(),
             styles: getStylesTemplate()
+        };
+        this.options = {
+            enableContractChecks: Boolean(options.enableContractChecks),
+            contractValidator: options.contractValidator || null
         };
     }
 
@@ -77,7 +82,7 @@ class EPUBGenerator {
             const uniqueId = this.generateUniqueId();
             const bookData = {
                 title: this.sanitizeTitle(title),
-                content: this.sanitizeContent(content),
+                content: content,
                 images: sanitizeImageInputs(images),
                 url: url,
                 uuid: uniqueId,
@@ -185,17 +190,20 @@ class EPUBGenerator {
         // Обработка изображений
         const imageManifest = await this.addImagesToZip(oebps, bookData.images);
 
+        const chapters = this.buildChapterEntries(bookData, imageManifest);
+
         // content.opf
-        const contentOPF = this.generateContentOPF(bookData, imageManifest);
+        const contentOPF = this.generateContentOPF(bookData, imageManifest, chapters);
         oebps.file('content.opf', contentOPF);
 
         // toc.ncx
-        const tocNCX = this.generateTocNCX(bookData);
+        const tocNCX = this.generateTocNCX(bookData, chapters);
         oebps.file('toc.ncx', tocNCX);
 
         // Основной контент
-        const chapterContent = this.generateChapterXHTML(bookData, imageManifest);
-        oebps.file('chapter1.xhtml', chapterContent);
+        chapters.forEach((chapter) => {
+            oebps.file(chapter.filename, chapter.xhtml);
+        });
     }
 
     // Добавление изображений в ZIP
@@ -235,28 +243,57 @@ class EPUBGenerator {
     }
 
     // Генерация content.opf
-    generateContentOPF(bookData, imageManifest) {
+    generateContentOPF(bookData, imageManifest, chapters = []) {
+        const chapterEntries = chapters.length
+            ? chapters
+            : [{ id: 'chapter1', filename: 'chapter1.xhtml' }];
+
         let manifest = `
         <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
-        <item id="css" href="styles.css" media-type="text/css"/>
-        <item id="chapter1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>`;
+        <item id="css" href="styles.css" media-type="text/css"/>`;
+
+        chapterEntries.forEach(chapter => {
+            manifest += `\n        <item id="${chapter.id}" href="${chapter.filename}" media-type="application/xhtml+xml"/>`;
+        });
 
         imageManifest.forEach(image => {
             manifest += `\n        <item id="${image.id}" href="images/${image.filename}" media-type="${image.mediaType}"/>`;
         });
 
+        const spine = chapterEntries
+            .map(chapter => `        <itemref idref="${chapter.id}"/>`)
+            .join('\n');
+
         return this.templates.contentOPF
             .replace('{{BOOK_ID}}', bookData.id)
             .replace('{{TITLE}}', this.escapeXML(bookData.title))
             .replace('{{TIMESTAMP}}', bookData.timestamp)
-            .replace('{{MANIFEST}}', manifest);
+            .replace('{{MANIFEST}}', manifest)
+            .replace('{{SPINE}}', spine);
     }
 
     // Генерация toc.ncx
-    generateTocNCX(bookData) {
+    generateTocNCX(bookData, chapters = []) {
+        const chapterEntries = chapters.length
+            ? chapters
+            : [{ id: 'chapter1', filename: 'chapter1.xhtml', title: bookData.title }];
+
+        const navPoints = chapterEntries
+            .map((chapter, index) => {
+                const playOrder = index + 1;
+                return `        <navPoint id="navpoint-${playOrder}" playOrder="${playOrder}">
+            <navLabel>
+                <text>${this.escapeXML(chapter.title || bookData.title)}</text>
+            </navLabel>
+            <content src="${chapter.filename}"/>
+        </navPoint>`;
+            })
+            .join('\n');
+
         return this.templates.tocNCX
             .replace(/{{BOOK_ID}}/g, bookData.id)
-            .replace(/{{TITLE}}/g, this.escapeXML(bookData.title));
+            .replace(/{{TITLE}}/g, this.escapeXML(bookData.title))
+            .replace('{{NAV_POINTS}}', navPoints);
     }
 
     // Генерация chapter XHTML
@@ -307,40 +344,159 @@ class EPUBGenerator {
     sanitizeContent(content) {
         const trimmed = content.trim();
         if (!trimmed) {
-            return '<p>Контент не найден.</p>';
+            return sanitizeXhtml('<p>Контент не найден.</p>');
         }
-        return this.normalizePocketbookXhtml(trimmed);
+        return sanitizeXhtml(trimmed);
     }
 
     // AICODE-NOTE: DECISION/POCKETBOOK-XHTML decision: normalize content to PocketBook-safe XHTML ref: docs/decisions/ADR-0002-pocketbook-xhtml-contract.md
     normalizePocketbookXhtml(html) {
-        let sanitized = html;
-
-        sanitized = sanitized.replace(/<picture\b[^>]*>[\s\S]*?<\/picture>/gi, (match) => {
-            const imgMatch = match.match(/<img\b[^>]*>/i);
-            return imgMatch ? imgMatch[0] : '';
-        });
-        sanitized = sanitized.replace(/<picture\b[^>]*\/>/gi, '');
-        sanitized = sanitized.replace(/<source\b[^>]*>/gi, '');
-        sanitized = sanitized.replace(/<\/source>/gi, '');
-        sanitized = sanitized.replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, '');
-        sanitized = sanitized.replace(/<svg\b[^>]*\/>/gi, '');
-
-        sanitized = sanitized.replace(/<figure\b[^>]*>/gi, '<div>');
-        sanitized = sanitized.replace(/<\/figure>/gi, '</div>');
-        sanitized = sanitized.replace(/<figcaption\b[^>]*>/gi, '<p class="caption">');
-        sanitized = sanitized.replace(/<\/figcaption>/gi, '</p>');
-
-        sanitized = sanitized.replace(/<br\b([^>]*)>/gi, (_, attrs) => this.formatVoidTag('br', attrs));
-        sanitized = sanitized.replace(/<hr\b([^>]*)>/gi, (_, attrs) => this.formatVoidTag('hr', attrs));
-
-        return sanitized;
+        return sanitizeXhtml(html).xhtml;
     }
 
-    formatVoidTag(tagName, attrs = '') {
-        const cleaned = String(attrs).replace(/\/\s*$/, '').trim();
-        const suffix = cleaned ? ` ${cleaned}` : '';
-        return `<${tagName}${suffix} />`;
+    buildChapterEntries(bookData, imageManifest) {
+        const { xhtml: sanitizedContent } = this.sanitizeContent(bookData.content);
+        const chapterContents = this.splitContentIntoChapters(sanitizedContent);
+        return chapterContents.map((content, index) => {
+            const chapterTitle = this.getChapterTitle(bookData.title, index, chapterContents.length);
+            const chapterData = {
+                ...bookData,
+                title: chapterTitle,
+                content
+            };
+            const chapterXhtml = this.generateChapterXHTML(chapterData, imageManifest);
+            this.assertContractIfEnabled(chapterXhtml, {
+                title: chapterTitle,
+                index
+            });
+            return {
+                id: `chapter${index + 1}`,
+                filename: `chapter${index + 1}.xhtml`,
+                title: chapterTitle,
+                xhtml: chapterXhtml
+            };
+        });
+    }
+
+    getChapterTitle(baseTitle, index, total) {
+        if (total <= 1) {
+            return baseTitle;
+        }
+        if (index === 0) {
+            return baseTitle;
+        }
+        return `${baseTitle} — Часть ${index + 1}`;
+    }
+
+    splitContentIntoChapters(html) {
+        const blockCount = this.countMatches(html, /<(p|h[1-6]|pre|blockquote|ul|ol|li|div|section|article|table)\b/gi);
+        const imageCount = this.countMatches(html, /<img\b/gi);
+        const preCount = this.countMatches(html, /<pre\b/gi);
+
+        const thresholds = {
+            maxChars: preCount > 0 ? 80000 : 120000,
+            maxBlocks: preCount > 0 ? 150 : 220,
+            maxImages: 30
+        };
+
+        if (html.length <= thresholds.maxChars &&
+            blockCount <= thresholds.maxBlocks &&
+            imageCount <= thresholds.maxImages) {
+            return [html];
+        }
+
+        const blocks = this.extractChapterBlocks(html);
+        if (blocks.length === 0) {
+            return [html];
+        }
+
+        const chapters = [];
+        let current = '';
+        let currentChars = 0;
+        let currentBlocks = 0;
+        let currentImages = 0;
+
+        blocks.forEach((block) => {
+            const blockImages = this.countMatches(block, /<img\b/gi);
+            const nextChars = currentChars + block.length;
+            const nextBlocks = currentBlocks + 1;
+            const nextImages = currentImages + blockImages;
+
+            if (current &&
+                (nextChars > thresholds.maxChars ||
+                 nextBlocks > thresholds.maxBlocks ||
+                 nextImages > thresholds.maxImages)) {
+                chapters.push(current);
+                current = '';
+                currentChars = 0;
+                currentBlocks = 0;
+                currentImages = 0;
+            }
+
+            current += block;
+            currentChars += block.length;
+            currentBlocks += 1;
+            currentImages += blockImages;
+        });
+
+        if (current) {
+            chapters.push(current);
+        }
+
+        return chapters.length ? chapters : [html];
+    }
+
+    extractChapterBlocks(html) {
+        const blocks = [];
+        const blockRegex = /<(h[1-6]|p|pre|blockquote|ul|ol|li|div|section|article|table)\b[^>]*>[\s\S]*?<\/\1>|<hr\b[^>]*\/>|<br\b[^>]*\/>|<img\b[^>]*\/?>/gi;
+        let lastIndex = 0;
+        let match;
+
+        while ((match = blockRegex.exec(html)) !== null) {
+            if (match.index > lastIndex) {
+                const loose = html.slice(lastIndex, match.index);
+                const wrapped = this.wrapLooseText(loose);
+                if (wrapped) {
+                    blocks.push(wrapped);
+                }
+            }
+
+            blocks.push(match[0]);
+            lastIndex = match.index + match[0].length;
+        }
+
+        if (lastIndex < html.length) {
+            const loose = html.slice(lastIndex);
+            const wrapped = this.wrapLooseText(loose);
+            if (wrapped) {
+                blocks.push(wrapped);
+            }
+        }
+
+        return blocks;
+    }
+
+    wrapLooseText(text) {
+        const trimmed = text.trim();
+        if (!trimmed) {
+            return '';
+        }
+        return `<p>${trimmed}</p>`;
+    }
+
+    countMatches(text, regex) {
+        const matches = text.match(regex);
+        return matches ? matches.length : 0;
+    }
+
+    assertContractIfEnabled(xhtml, context = {}) {
+        if (!this.options.enableContractChecks || !this.options.contractValidator) {
+            return;
+        }
+        const errors = this.options.contractValidator(xhtml, context) || [];
+        if (errors.length > 0) {
+            throw new Error(`PocketBook XHTML contract failed: ${errors.join(', ')}`);
+        }
     }
 
     generateUniqueId() {

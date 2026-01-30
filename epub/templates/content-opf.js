@@ -13,7 +13,7 @@ export function getContentOpfTemplate() {
     <manifest>{{MANIFEST}}
     </manifest>
     <spine toc="ncx">
-        <itemref idref="chapter1"/>
+{{SPINE}}
     </spine>
 </package>`;
 }
