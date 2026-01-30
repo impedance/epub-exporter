@@ -305,7 +305,42 @@ class EPUBGenerator {
     }
 
     sanitizeContent(content) {
-        return content.trim() || '<p>Контент не найден.</p>';
+        const trimmed = content.trim();
+        if (!trimmed) {
+            return '<p>Контент не найден.</p>';
+        }
+        return this.normalizePocketbookXhtml(trimmed);
+    }
+
+    // AICODE-NOTE: DECISION/POCKETBOOK-XHTML decision: normalize content to PocketBook-safe XHTML ref: docs/decisions/ADR-0002-pocketbook-xhtml-contract.md
+    normalizePocketbookXhtml(html) {
+        let sanitized = html;
+
+        sanitized = sanitized.replace(/<picture\b[^>]*>[\s\S]*?<\/picture>/gi, (match) => {
+            const imgMatch = match.match(/<img\b[^>]*>/i);
+            return imgMatch ? imgMatch[0] : '';
+        });
+        sanitized = sanitized.replace(/<picture\b[^>]*\/>/gi, '');
+        sanitized = sanitized.replace(/<source\b[^>]*>/gi, '');
+        sanitized = sanitized.replace(/<\/source>/gi, '');
+        sanitized = sanitized.replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, '');
+        sanitized = sanitized.replace(/<svg\b[^>]*\/>/gi, '');
+
+        sanitized = sanitized.replace(/<figure\b[^>]*>/gi, '<div>');
+        sanitized = sanitized.replace(/<\/figure>/gi, '</div>');
+        sanitized = sanitized.replace(/<figcaption\b[^>]*>/gi, '<p class="caption">');
+        sanitized = sanitized.replace(/<\/figcaption>/gi, '</p>');
+
+        sanitized = sanitized.replace(/<br\b([^>]*)>/gi, (_, attrs) => this.formatVoidTag('br', attrs));
+        sanitized = sanitized.replace(/<hr\b([^>]*)>/gi, (_, attrs) => this.formatVoidTag('hr', attrs));
+
+        return sanitized;
+    }
+
+    formatVoidTag(tagName, attrs = '') {
+        const cleaned = String(attrs).replace(/\/\s*$/, '').trim();
+        const suffix = cleaned ? ` ${cleaned}` : '';
+        return `<${tagName}${suffix} />`;
     }
 
     generateUniqueId() {

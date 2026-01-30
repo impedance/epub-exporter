@@ -4,8 +4,8 @@
 # Current Status
 
 ## Current Focus
+- Lock down PocketBook-safe XHTML contract with sanitizer + regression tests (t1-t4).
 - Keep selection-based workflow documentation aligned with the actual implementation.
-- Refresh contributor guidance for developers and agents.
 - Validate architecture notes against `manifest.json` and core modules.
 
 ## Baseline
@@ -15,7 +15,7 @@
 ## Next Steps
 1. Ensure selection + image-handling docs stay consistent across files.
 2. Expand customization examples (tables, captions, edge cases).
-3. Update technical context if Chrome Selection APIs change.
+3. Extend PocketBook sanitizer for widget-like elements (t5) and chapter splitting (t6).
 4. Monitor EPUB generation performance on very large selections.
 
 ## Known Risks
