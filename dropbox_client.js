@@ -41,6 +41,7 @@ class DropboxClient {
 
     /**
      * Обновляет access token используя refresh token
+     * @param {{APP_KEY: string, APP_SECRET: string, REFRESH_TOKEN: string}} config
      * @returns {Promise<void>}
      */
     async refreshAccessToken(config) {
@@ -78,7 +79,7 @@ class DropboxClient {
 
     /**
      * Проверяет, настроен ли Dropbox (есть ли все необходимые ключи)
-     * @returns {boolean}
+     * @returns {Promise<boolean>}
      */
     async isConfigured() {
         const config = await this.getConfig();
@@ -122,9 +123,10 @@ class DropboxClient {
         try {
             const fileSize = typeof fileBlob.size === 'number' ? fileBlob.size : undefined;
             const accessToken = await this.getAccessToken();
-            const path = `${config.TARGET_FOLDER}/${filename}`;
+            const resolvedFilename = await this.ensureUniqueFilename(filename, config.TARGET_FOLDER, accessToken);
+            const path = `${config.TARGET_FOLDER}/${resolvedFilename}`;
             console.log(`${LOG_PREFIX} uploading file`, {
-                filename,
+                filename: resolvedFilename,
                 path,
                 bytes: fileSize ?? 'unknown'
             });
@@ -139,8 +141,8 @@ class DropboxClient {
                     'Content-Type': 'application/octet-stream',
                     'Dropbox-API-Arg': JSON.stringify({
                         path: path,
-                        mode: 'overwrite',
-                        autorename: true
+                        mode: 'add',
+                        autorename: false
                     }).replace(/[^\x00-\x7F]/g, c =>
                         '\\u' + ('0000' + c.charCodeAt(0).toString(16)).slice(-4)
                     )
@@ -163,9 +165,68 @@ class DropboxClient {
             return result.path_display;
 
         } catch (error) {
-            console.error(`${LOG_PREFIX} upload error`, error);
-            throw new Error(`Failed to upload to Dropbox: ${error.message}`);
+            const err = error instanceof Error ? error : new Error(String(error));
+            console.error(`${LOG_PREFIX} upload error`, err);
+            throw new Error(`Failed to upload to Dropbox: ${err.message}`);
         }
+    }
+
+    /**
+     * @param {string} filename
+     * @param {string} targetFolder
+     * @param {string} accessToken
+     * @returns {Promise<string>}
+     */
+    async ensureUniqueFilename(filename, targetFolder, accessToken) {
+        const basePath = `${targetFolder}/${filename}`;
+        const exists = await this.fileExists(basePath, accessToken);
+        if (!exists) {
+            return filename;
+        }
+
+        for (let i = 1; i <= 5; i++) {
+            const candidate = `${i}-${filename}`;
+            const candidatePath = `${targetFolder}/${candidate}`;
+            const candidateExists = await this.fileExists(candidatePath, accessToken);
+            if (!candidateExists) {
+                return candidate;
+            }
+        }
+
+        const fallback = `${Date.now()}-${filename}`;
+        console.warn(`${LOG_PREFIX} name collision persists after 5 attempts, using timestamp fallback`, {
+            filename,
+            fallback
+        });
+        return fallback;
+    }
+
+    /**
+     * @param {string} path
+     * @param {string} accessToken
+     * @returns {Promise<boolean>}
+     */
+    async fileExists(path, accessToken) {
+        const response = await fetch('https://api.dropboxapi.com/2/files/get_metadata', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ path })
+        });
+
+        if (response.ok) {
+            return true;
+        }
+
+        const errorText = await response.text().catch(() => '');
+        if (response.status === 409 && errorText.includes('path/not_found')) {
+            return false;
+        }
+
+        console.error(`${LOG_PREFIX} metadata check failed`, response.status, errorText);
+        throw new Error(`Failed to check Dropbox path: ${response.status}`);
     }
 
     /**
@@ -246,7 +307,7 @@ class DropboxClient {
 
 // Создаем глобальный экземпляр
 if (typeof window !== 'undefined') {
-    window.dropboxClient = new DropboxClient();
+    (/** @type {any} */(window)).dropboxClient = new DropboxClient();
 }
 
 export default DropboxClient;

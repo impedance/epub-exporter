@@ -1,5 +1,8 @@
 // @ts-check
-/* global chrome, extractContentFromTab, dropboxClient */
+/* global chrome, window */
+
+/** @typedef {import('./types').ExtensionMessage} ExtensionMessage */
+/** @typedef {import('./types').CreateEPUBResponse} CreateEPUBResponse */
 
 document.addEventListener('DOMContentLoaded', function () {
     const exportBtn = /** @type {HTMLButtonElement} */ (document.getElementById('exportBtn'));
@@ -11,6 +14,9 @@ document.addEventListener('DOMContentLoaded', function () {
     const status = /** @type {HTMLDivElement} */ (document.getElementById('status'));
     const previewBtn = /** @type {HTMLButtonElement} */ (document.getElementById('previewBtn'));
 
+    /**
+     * @param {any[]} args
+     */
     const debugLog = (...args) => {
         console.log('[popup]', ...args);
     };
@@ -181,7 +187,13 @@ document.addEventListener('DOMContentLoaded', function () {
             renderWorkflowStage('extract', { dropbox: shouldUploadToDropbox, kindle: shouldSendToKindle });
             setProgress(20);
 
-            const response = await extractContentFromTab(tab.id);
+            /** @type {any} */
+            const extractContentFromTab = /** @type {any} */ (window).extractContentFromTab;
+            if (typeof extractContentFromTab !== 'function') {
+                throw new Error('extractContentFromTab недоступен (не загружен extractContent.js)');
+            }
+
+            const response = /** @type {{success:boolean, data:any, error?:string}} */ (await extractContentFromTab(tab.id));
             debugLog('Content extraction response', response);
 
             if (!response || !response.success) {
@@ -192,12 +204,12 @@ document.addEventListener('DOMContentLoaded', function () {
             renderWorkflowStage('epub', { dropbox: shouldUploadToDropbox, kindle: shouldSendToKindle });
             setProgress(40);
 
-            const epubResponse = await chrome.runtime.sendMessage({
+            const epubResponse = /** @type {CreateEPUBResponse} */ (await chrome.runtime.sendMessage({
                 action: 'createEPUB',
                 data: response.data,
                 uploadToDropbox: shouldUploadToDropbox,
                 sendToKindle: shouldSendToKindle
-            });
+            }));
             debugLog('EPUB generation response', epubResponse);
 
             if (!epubResponse || !epubResponse.success) {
@@ -222,8 +234,8 @@ document.addEventListener('DOMContentLoaded', function () {
             if (!shouldSendToKindle) {
                 debugLog('Triggering local download');
                 await chrome.downloads.download({
-                    url: epubResponse.downloadUrl,
-                    filename: epubResponse.filename
+                    url: epubResponse.downloadUrl || '',
+                    filename: epubResponse.filename || ''
                 });
             } else {
                 debugLog('Skipping local download as Kindle was selected');
@@ -482,9 +494,13 @@ document.addEventListener('DOMContentLoaded', function () {
      */
     async function dataURLToBlob(dataUrl) {
         const parts = dataUrl.split(',');
-        const mimeMatch = parts[0].match(/:(.*?);/);
-        const mime = mimeMatch ? mimeMatch[1] : 'application/epub+zip';
-        const bstr = atob(parts[1]);
+        const mimeMatch = parts[0]?.match(/:(.*?);/);
+        const mime = mimeMatch ? mimeMatch[1] ?? 'application/epub+zip' : 'application/epub+zip';
+        const base64Data = parts[1];
+        if (!base64Data) {
+            throw new Error('Invalid data URL');
+        }
+        const bstr = atob(base64Data);
         let n = bstr.length;
         const u8arr = new Uint8Array(n);
         while (n--) {

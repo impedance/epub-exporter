@@ -11,6 +11,9 @@ import { dirname, join } from 'path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+/**
+ * @param {string[]} testFiles
+ */
 function runTests(testFiles) {
     return new Promise((resolve, reject) => {
         const args = ['--test', ...testFiles];
@@ -26,11 +29,11 @@ function runTests(testFiles) {
         testProcess.stdout.on('data', (data) => {
             const text = data.toString();
             output += text;
-            
+
             // Count passing and failing tests
             const passMatches = text.match(/^ok \d+/gm);
             const failMatches = text.match(/^not ok \d+/gm);
-            
+
             if (passMatches) passed += passMatches.length;
             if (failMatches) failed += failMatches.length;
         });
@@ -54,7 +57,7 @@ async function main() {
             ]
         },
         {
-            name: 'Selection + Manifest Tests', 
+            name: 'Selection + Manifest Tests',
             files: [
                 'test/core/extractContent.test.mjs',
                 'test/core/manifest.test.mjs'
@@ -76,7 +79,7 @@ async function main() {
 
         try {
             const result = await runTests(suite.files);
-            
+
             if (result.code === 0) {
                 console.log(`✅ All tests passed (${result.passed} passed)`);
             } else {
@@ -88,7 +91,8 @@ async function main() {
             totalFailed += result.failed;
 
         } catch (error) {
-            console.log(`💥 Test suite failed to run: ${error.message}`);
+            const err = /** @type {Error} */ (error);
+            console.log(`💥 Test suite failed to run: ${err.message}`);
             allPassed = false;
         }
 

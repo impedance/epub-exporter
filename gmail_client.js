@@ -41,10 +41,15 @@ class GmailClient {
         }
 
         return new Promise((resolve, reject) => {
-            chrome.identity.getAuthToken({ interactive }, (token) => {
+            chrome.identity.getAuthToken({ interactive }, (tokenResult) => {
                 if (chrome.runtime.lastError) {
                     console.warn(`${LOG_PREFIX} auth failed:`, chrome.runtime.lastError.message);
                     reject(new Error(chrome.runtime.lastError.message));
+                    return;
+                }
+                const token = typeof tokenResult === 'string' ? tokenResult : (tokenResult?.token || '');
+                if (!token) {
+                    reject(new Error('Не удалось получить токен доступа'));
                     return;
                 }
                 this.accessToken = token;
@@ -57,8 +62,8 @@ class GmailClient {
      * Отправляет EPUB файл на Kindle адрес
      * @param {Blob} fileBlob - EPUB файл
      * @param {string} filename - Имя файла
-     * @param {string} kindleEmail - Email адрес Kindle
-     * @returns {Promise<Object>} - Ответ от Gmail API
+     * @param {string} [kindleEmail] - Email адрес Kindle
+     * @returns {Promise<any>} - Ответ от Gmail API
      */
     async sendEmail(fileBlob, filename, kindleEmail) {
         const token = await this.getAccessToken(true);
@@ -143,7 +148,10 @@ class GmailClient {
         let binary = '';
         const len = bytes.byteLength;
         for (let i = 0; i < len; i++) {
-            binary += String.fromCharCode(bytes[i]);
+            const byte = bytes[i];
+            if (byte !== undefined) {
+                binary += String.fromCharCode(byte);
+            }
         }
         return btoa(binary);
     }

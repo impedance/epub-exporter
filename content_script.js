@@ -25,14 +25,16 @@ const NOISE_SELECTORS = [
     '#sidebar', '#navigation', '#header', '#footer'
 ];
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.action === 'extractContent') {
+    const msg = /** @type {ExtensionMessage} */ (request);
+
+    if (msg.action === 'extractContent') {
         extractPageContent()
             .then(data => sendResponse({ success: true, data }))
             .catch(error => sendResponse({ success: false, error: error.message }));
         return true; // Асинхронный ответ
     }
 
-    if (request.action === 'extractCleanContent') {
+    if (msg.action === 'extractCleanContent') {
         extractCleanPageContent()
             .then(data => sendResponse({ success: true, data }))
             .catch(error => sendResponse({ success: false, error: error.message }));
@@ -156,8 +158,12 @@ function extractTitle() {
 
     for (const selector of titleSelectors) {
         const element = document.querySelector(selector);
-        if (element && element.textContent.trim()) {
-            return cleanText(element.textContent);
+        if (element) {
+            // Apply cleanText FIRST to handle NBSP-only titles
+            const cleaned = cleanText(element.textContent || '');
+            if (cleaned) {
+                return cleaned;
+            }
         }
     }
 

@@ -3,8 +3,12 @@ import path from 'node:path';
 import '../jszip.min.js';
 import { sanitizeXhtml } from '../epub/sanitize_xhtml.js';
 
+// @ts-ignore
 const JSZip = globalThis.JSZip;
 
+/**
+ * @returns {string}
+ */
 function usage() {
   return `Usage: node scripts/repair_epub.js <input.epub> [output.epub]
 
@@ -13,6 +17,10 @@ sanitizer used in EPUB generation. The output preserves the required mimetype
 rules for EPUB packaging.`;
 }
 
+/**
+ * @param {string} inputPath
+ * @param {string} outputPath
+ */
 async function repairEpub(inputPath, outputPath) {
   if (!JSZip) {
     throw new Error('JSZip is not available on globalThis');
@@ -99,15 +107,20 @@ if (args.length === 0 || args.includes('--help') || args.includes('-h')) {
   process.exit(0);
 }
 
-const inputPath = args[0];
-const outputPath = args[1] || (() => {
-  const ext = path.extname(inputPath);
-  const base = ext ? inputPath.slice(0, -ext.length) : inputPath;
+const inputPathArg = args[0];
+if (!inputPathArg) {
+  console.log(usage());
+  process.exit(1);
+}
+
+const outputPathArg = args[1] || (() => {
+  const ext = path.extname(inputPathArg);
+  const base = ext ? inputPathArg.slice(0, -ext.length) : inputPathArg;
   const finalExt = ext || '.epub';
   return `${base}_repaired${finalExt}`;
 })();
 
-repairEpub(inputPath, outputPath).catch((error) => {
+repairEpub(inputPathArg, outputPathArg).catch((error) => {
   console.error('Failed to repair EPUB:', error);
   process.exit(1);
 });

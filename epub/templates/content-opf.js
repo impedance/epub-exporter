@@ -8,7 +8,6 @@ export function getContentOpfTemplate() {
         <dc:creator>EPUB Экспортер</dc:creator>
         <dc:language>ru</dc:language>
         <dc:date>{{TIMESTAMP}}</dc:date>
-        <meta name="cover" content="cover"/>
     </metadata>
     <manifest>{{MANIFEST}}
     </manifest>

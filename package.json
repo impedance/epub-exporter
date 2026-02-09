@@ -17,6 +17,10 @@
   "license": "ISC",
   "type": "module",
   "devDependencies": {
-    "jsdom": "^26.1.0"
+    "@types/chrome": "^0.1.36",
+    "@types/jszip": "^3.4.0",
+    "@types/node": "^25.1.0",
+    "jsdom": "^26.1.0",
+    "typescript": "^5.9.3"
   }
 }

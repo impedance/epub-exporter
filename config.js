@@ -19,7 +19,9 @@ export const MAX_IMAGE_WIDTH = 1200;
 /** Качество JPEG сжатия */
 export const JPEG_QUALITY = 0.8;
 
+/** @type {Promise<any>|null} */
 let cachedConfigPromise = null;
+/** @type {Promise<any>|null} */
 let cachedGmailConfigPromise = null;
 
 /**
@@ -66,16 +68,17 @@ export async function loadDropboxConfig() {
     const config = await cachedConfigPromise;
 
     if (typeof globalThis !== 'undefined') {
-        globalThis.DROPBOX_CONFIG = config;
+        (/** @type {any} */(globalThis)).DROPBOX_CONFIG = config;
     }
+
 
     return config;
 }
 
 async function resolveDropboxConfig() {
     // 1. Учитываем заранее установленные глобальные значения (например, в тестах)
-    if (typeof globalThis !== 'undefined' && globalThis.DROPBOX_CONFIG) {
-        return normalizeConfig(globalThis.DROPBOX_CONFIG);
+    if (typeof globalThis !== 'undefined' && (/** @type {any} */(globalThis)).DROPBOX_CONFIG) {
+        return normalizeConfig((/** @type {any} */(globalThis)).DROPBOX_CONFIG);
     }
 
     // 2. Поддержка process.env (Node.js, тесты, build scripts)
@@ -146,7 +149,7 @@ async function loadFromEnvFile() {
  * @param {unknown} rawConfig
  */
 function normalizeConfig(rawConfig) {
-    const configObject = typeof rawConfig === 'object' && rawConfig !== null ? rawConfig : {};
+    const configObject = /** @type {Record<string, any>} */ (typeof rawConfig === 'object' && rawConfig !== null ? rawConfig : {});
 
     const normalized = {
         APP_KEY: readConfigValue(configObject, ['APP_KEY', ENV_KEY_MAP.APP_KEY]),

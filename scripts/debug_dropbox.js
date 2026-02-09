@@ -14,9 +14,12 @@ if (fs.existsSync(envPath)) {
     envContent.split('\n').forEach(line => {
         const parts = line.split('=');
         if (parts.length >= 2 && !line.trim().startsWith('#')) {
-            const key = parts[0].trim();
-            const value = parts.slice(1).join('=').trim();
-            process.env[key] = value;
+            const potentialKey = parts[0];
+            if (potentialKey) {
+                const key = potentialKey.trim();
+                const value = parts.slice(1).join('=').trim();
+                process.env[key] = value;
+            }
         }
     });
 }
@@ -46,8 +49,9 @@ async function run() {
             console.error('Dropbox not connected!');
         }
     } catch (error) {
-        console.error('Error during test:', error);
-        if (error.cause) console.error('Cause:', error.cause);
+        const err = /** @type {any} */ (error);
+        console.error('Error during test:', err);
+        if (err.cause) console.error('Cause:', err.cause);
     }
 }
 

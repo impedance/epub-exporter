@@ -34,8 +34,8 @@ test('createEPUB produces well-formed archive with sanitized filename', async ()
     );
     assert.match(
       filename,
-      /^My_Test_Title_\d{4}-\d{2}-\d{2}\.epub$/,
-      'Filename should be sanitized and timestamped'
+      /^my-test-title\.epub$/,
+      'Filename should be slugged from title'
     );
 
     const zipBuffer = Buffer.from(downloadUrl.split(',')[1], 'base64');
@@ -56,4 +56,22 @@ test('createEPUB produces well-formed archive with sanitized filename', async ()
   } finally {
     URL.createObjectURL = originalCreateObjectURL;
   }
+});
+
+test('createEPUB falls back to content words when title is missing', async () => {
+  assert.ok(JSZip, 'JSZip should be available via global scope');
+
+  const generator = new EPUBGenerator();
+  const { filename } = await generator.createEPUB(
+    '   ',
+    '<p>Первое предложение для теста. Второе уже не нужно.</p>',
+    [],
+    'https://example.com/article'
+  );
+
+  assert.equal(
+    filename,
+    'pervoe-predlozhenie-dlya.epub',
+    'Filename should use first 2-3 words from content when title is missing'
+  );
 });

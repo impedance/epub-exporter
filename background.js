@@ -8,8 +8,16 @@ import DropboxClient from './dropbox_client.js';
 // AICODE-NOTE: NAV/BACKGROUND entry: chrome.runtime.onMessage -> createEPUBFile ref: background.js
 /** @typedef {import('./types').ExtractedImage} ExtractedImage */
 /** @typedef {import('./types').ExtractedContent} ExtractedContent */
+/** @type {Promise<any>|null} */
+let cachedConfigPromise = null;
+/** @type {Promise<any>|null} */
+let cachedGmailConfigPromise = null;
+/** @typedef {import('./types').ExtensionMessage} ExtensionMessage */
+/** @typedef {import('./types').CreateEPUBResponse} CreateEPUBResponse */
+/** @typedef {import('./types').FetchImageResponse} FetchImageResponse */
 // AICODE-LINK: ./types.d.ts#ExtractedImage
 // AICODE-LINK: ./types.d.ts#ExtractedContent
+// AICODE-LINK: ./types.d.ts#ExtensionMessage
 // AICODE-LINK: ./epub_generator.js#createEPUB
 
 import GmailClient from './gmail_client.js';
@@ -18,20 +26,22 @@ const dropboxClient = new DropboxClient();
 const gmailClient = new GmailClient();
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.action === 'createEPUB') {
-        createEPUBFile(request.data, {
-            uploadToDropbox: Boolean(request.uploadToDropbox),
-            sendToKindle: Boolean(request.sendToKindle)
+    const msg = /** @type {ExtensionMessage} */ (request);
+
+    if (msg.action === 'createEPUB') {
+        createEPUBFile(msg.data, {
+            uploadToDropbox: Boolean(msg.uploadToDropbox),
+            sendToKindle: Boolean(msg.sendToKindle)
         })
-            .then(result => sendResponse({ success: true, ...result }))
-            .catch(error => sendResponse({ success: false, error: error.message }));
+            .then(result => sendResponse(/** @type {CreateEPUBResponse} */({ success: true, ...result })))
+            .catch(error => sendResponse(/** @type {CreateEPUBResponse} */({ success: false, error: error.message })));
         return true; // Асинхронный ответ
     }
 
-    if (request.action === 'fetchImageAsDataURL' && request.url) {
-        fetchImageAsDataURL(request.url)
-            .then(dataUrl => sendResponse({ success: true, dataUrl }))
-            .catch(error => sendResponse({ success: false, error: error.message }));
+    if (msg.action === 'fetchImageAsDataURL' && msg.url) {
+        fetchImageAsDataURL(msg.url)
+            .then(dataUrl => sendResponse(/** @type {FetchImageResponse} */({ success: true, dataUrl })))
+            .catch(error => sendResponse(/** @type {FetchImageResponse} */({ success: false, error: error.message })));
         return true;
     }
 });
@@ -66,7 +76,7 @@ async function createEPUBFile(data, options = {}) {
         let kindleSent = false;
         if (options.sendToKindle) {
             console.log('[background][kindle] send requested', { filename: result.filename });
-            await gmailClient.sendEmail(result.blob, result.filename);
+            await gmailClient.sendEmail(result.blob, result.filename, '');
             kindleSent = true;
             console.log('[background][kindle] send completed');
         }
@@ -119,14 +129,16 @@ async function prepareImages(images = [], pageUrl = '', htmlContent = '') {
         if (!image) {
             continue;
         }
-        queue.push({
+        /** @type {any} */
+        const item = {
             originalSrc: image.originalSrc || image.src || '',
             resolvedSrc: image.src || '',
             alt: image.alt || '',
             width: image.width ?? 'auto',
             height: image.height ?? 'auto',
             base64: typeof image.base64 === 'string' ? image.base64 : ''
-        });
+        };
+        queue.push(item);
     }
 
     const htmlCandidates = extractImageCandidatesFromHtml(htmlContent, pageUrl);
@@ -145,16 +157,17 @@ async function prepareImages(images = [], pageUrl = '', htmlContent = '') {
             : null;
 
         if (!base64Data) {
-            const candidates = new Set();
+            /** @type {Set<string>} */
+            const fetchCandidates = new Set();
             if (candidate.resolvedSrc) {
-                candidates.add(candidate.resolvedSrc);
+                fetchCandidates.add(candidate.resolvedSrc);
             }
             if (candidate.originalSrc) {
-                candidates.add(candidate.originalSrc);
+                fetchCandidates.add(candidate.originalSrc);
             }
 
             const tried = new Set();
-            for (const srcCandidate of candidates) {
+            for (const srcCandidate of fetchCandidates) {
                 const normalized = normalizeImageUrl(srcCandidate, pageUrl);
                 if (!normalized || tried.has(normalized)) {
                     continue;
@@ -269,13 +282,14 @@ function makeImageKey(originalSrc, resolvedSrc, pageUrl) {
  * Extracts <img> candidates from raw HTML content.
  * @param {string} html
  * @param {string} pageUrl
- * @returns {Array<{originalSrc: string, resolvedSrc: string, alt: string, width: number|string, height: number|string, base64?: string}>}
+ * @returns {ExtractedImage[]}
  */
 function extractImageCandidatesFromHtml(html, pageUrl) {
     if (typeof html !== 'string' || html.trim() === '') {
         return [];
     }
 
+    /** @type {ExtractedImage[]} */
     const candidates = [];
 
     if (typeof DOMParser !== 'undefined') {
@@ -291,7 +305,8 @@ function extractImageCandidatesFromHtml(html, pageUrl) {
                 const resolved = normalizeImageUrl(srcAttr, pageUrl) || srcAttr;
                 candidates.push({
                     originalSrc: srcAttr,
-                    resolvedSrc: resolved,
+                    src: resolved,
+                    base64: '',
                     alt: img.getAttribute('alt') || '',
                     width: img.getAttribute('width') || 'auto',
                     height: img.getAttribute('height') || 'auto'
@@ -313,7 +328,7 @@ function extractImageCandidatesFromHtml(html, pageUrl) {
         if (!srcMatch) {
             continue;
         }
-        const attr = srcMatch[1].trim();
+        const attr = tag.match(/src=["']([^"']*)["']/i)?.[1];
         if (!attr) {
             continue;
         }
@@ -321,13 +336,16 @@ function extractImageCandidatesFromHtml(html, pageUrl) {
         const altMatch = tag.match(/\salt=["']([^"']*)["']/i);
         const widthMatch = tag.match(/\swidth=["']([^"']*)["']/i);
         const heightMatch = tag.match(/\sheight=["']([^"']*)["']/i);
-        candidates.push({
-            originalSrc: attr,
-            resolvedSrc: resolved,
-            alt: altMatch ? altMatch[1] : '',
-            width: widthMatch ? widthMatch[1] : 'auto',
-            height: heightMatch ? heightMatch[1] : 'auto'
-        });
+        if (resolved) {
+            candidates.push({
+                src: resolved,
+                originalSrc: attr,
+                base64: '',
+                alt: altMatch?.[1] ?? '',
+                width: widthMatch?.[1] ?? 'auto',
+                height: heightMatch?.[1] ?? 'auto'
+            });
+        }
     }
 
     return candidates;
@@ -407,8 +425,12 @@ function arrayBufferToBase64(buffer) {
     for (let i = 0; i < bytes.length; i += chunkSize) {
         const chunk = bytes.subarray(i, i + chunkSize);
         let chunkString = '';
-        for (let j = 0; j < chunk.length; j++) {
-            chunkString += String.fromCharCode(chunk[j]);
+        const chunkLen = chunk.length;
+        for (let j = 0; j < chunkLen; j++) {
+            const byte = chunk[j];
+            if (byte !== undefined) {
+                chunkString += String.fromCharCode(byte);
+            }
         }
         binary += chunkString;
     }
@@ -462,8 +484,9 @@ async function optimizeImage(dataUrl) {
         // Сохраняем как JPEG (даже если был GIF или PNG)
         const optimizedBlob = await canvas.convertToBlob({
             type: 'image/jpeg',
-            quality: JPEG_QUALITY
+            quality: Number(JPEG_QUALITY || 0.8)
         });
+
 
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
