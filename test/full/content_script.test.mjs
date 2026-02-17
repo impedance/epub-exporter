@@ -118,7 +118,13 @@ async function loadContentScript(dom) {
     const fs = await import('fs');
     const path = await import('path');
     const __dirname = path.dirname(new URL(import.meta.url).pathname);
+    const cleanupPath = path.join(__dirname, '../../content/cleanup.js');
+    const selectionPath = path.join(__dirname, '../../content/selection.js');
+    const imagesPath = path.join(__dirname, '../../content/images.js');
     const contentScriptPath = path.join(__dirname, '../../content_script.js');
+    const cleanupScript = fs.readFileSync(cleanupPath, 'utf8');
+    const selectionScript = fs.readFileSync(selectionPath, 'utf8');
+    const imagesScript = fs.readFileSync(imagesPath, 'utf8');
     const contentScript = fs.readFileSync(contentScriptPath, 'utf8');
     
     // Remove Chrome-specific code for testing and create a testable version
@@ -128,7 +134,10 @@ async function loadContentScript(dom) {
         .replace(/\/\/@ts-check/, '')
         .replace(/\/\*\* @typedef.*?\*\//sg, ''); // Remove JSDoc typedefs
     
-    // Execute the script in the DOM context
+    // Execute helper modules first, then the orchestration script
+    dom.window.eval(cleanupScript);
+    dom.window.eval(selectionScript);
+    dom.window.eval(imagesScript);
     dom.window.eval(testableScript);
     
     // Verify that functions are available
@@ -222,15 +231,16 @@ test('extractSelectedContent captures span-wrapped paragraphs', async (t) => {
     assert.ok(result.includes('<ul'));
 });
 
-test('extractPageContent falls back to clean extraction when no text is selected', async (t) => {
+test('extractPageContent requires explicit selection for export', async (t) => {
     const errorMock = t.mock.method(console, 'error', () => {});
     const { dom } = createMockSelection(''); // Empty selection
     await loadContentScript(dom);
     installReadability(dom, { title: 'Clean Title', content: '<p>Fallback</p>' });
-    
-    const result = await dom.window.extractPageContent();
-    assert.equal(result.title, 'Clean Title');
-    assert.ok(result.content.includes('Fallback'));
+
+    await assert.rejects(
+        () => dom.window.extractPageContent(),
+        /Сначала выделите текст на странице/
+    );
     errorMock.mock.restore();
 });
 

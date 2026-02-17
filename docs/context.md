@@ -34,6 +34,7 @@ Export user-selected web content into clean EPUB files optimized for PocketBook 
 
 ## Invariants (Do Not Break)
 - Selection-based extraction is the only supported capture path.
+- Clean extraction (Readability) is preview-only and must not be used as export fallback.
 - EPUB output must keep valid structure (mimetype, META-INF, OEBPS).
 - Secrets stay out of git; Dropbox/Gmail config is loaded from `.env` at runtime.
 

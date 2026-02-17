@@ -9,27 +9,56 @@
 /** @typedef {import('./types').ExtractedImage} ExtractedImage */
 /** @typedef {import('./types').ExtractedContent} ExtractedContent */
 
+const CONTENT_SCRIPT_FILES = [
+  'lib/readability.js',
+  'lib/dompurify.js',
+  'content/cleanup.js',
+  'content/selection.js',
+  'content/images.js',
+  'content_script.js'
+];
+
+/**
+ * Sends a content-script message and injects scripts on demand if needed.
+ * @param {number} tabId
+ * @param {'extractContent' | 'extractCleanContent'} action
+ * @returns {Promise<{success: boolean, data?: ExtractedContent, error?: string}>}
+ */
+export async function sendMessageWithAutoInject(tabId, action) {
+  try {
+    return await chrome.tabs.sendMessage(tabId, { action });
+  } catch (err) {
+    const error = /** @type {Error} */ (err);
+    if (error.message && error.message.includes('Could not establish connection')) {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: CONTENT_SCRIPT_FILES
+      });
+      return await chrome.tabs.sendMessage(tabId, { action });
+    }
+    throw error;
+  }
+}
+
 /**
  * Отправляет запрос на извлечение контента из вкладки.
  * @param {number} tabId
  * @returns {Promise<{success: boolean, data?: ExtractedContent, error?: string}>}
  */
 export async function extractContentFromTab(tabId) {
-  try {
-    return await chrome.tabs.sendMessage(tabId, { action: 'extractContent' });
-  } catch (err) {
-    const error = /** @type {Error} */ (err);
-    if (error.message && error.message.includes('Could not establish connection')) {
-      await chrome.scripting.executeScript({
-        target: { tabId },
-        files: ['lib/readability.js', 'lib/dompurify.js', 'content_script.js']
-      });
-      return await chrome.tabs.sendMessage(tabId, { action: 'extractContent' });
-    }
-    throw error;
-  }
+  return sendMessageWithAutoInject(tabId, 'extractContent');
+}
+
+/**
+ * Отправляет запрос на извлечение "чистого" контента из вкладки.
+ * @param {number} tabId
+ * @returns {Promise<{success: boolean, data?: ExtractedContent, error?: string}>}
+ */
+export async function extractCleanContentFromTab(tabId) {
+  return sendMessageWithAutoInject(tabId, 'extractCleanContent');
 }
 
 if (typeof window !== 'undefined') {
   /** @type {any} */ (window).extractContentFromTab = extractContentFromTab;
+  /** @type {any} */ (window).extractCleanContentFromTab = extractCleanContentFromTab;
 }

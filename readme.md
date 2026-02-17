@@ -10,11 +10,14 @@
 ## Repository layout
 - `manifest.json` — extension wiring, permissions, scripts; `rg -n "manifest_version" manifest.json`
 - `content_script.js` — selection extraction entry point; `rg -n "AICODE-" content_script.js`
+- `content/` — selection/cleanup/image helpers for content extraction; `rg -n "EpubContent" content/`
 - `background.js` — EPUB creation + image fetch fallback; `rg -n "AICODE-" background.js`
+- `background/images.js` — image normalization/fetch/optimization pipeline; `rg -n "prepareImages|fetchImageAsDataURL" background/images.js`
 - `extractContent.js` — tab messaging + content script injection; `rg -n "extractContent" extractContent.js`
 - `epub_generator.js` — EPUB structure + JSZip integration; `rg -n "createEPUB" epub_generator.js`
 - `epub/` — templates + asset helpers; `rg -n "get.*Template" epub/`
 - `popup.html` / `popup.js` — UI flow; `rg -n "export" popup.js`
+- `ui/` — popup view/state/events modules; `rg -n "createPopup|initializePopup" ui/`
 - `dropbox_client.js` / `gmail_client.js` / `config.js` — Dropbox/Gmail upload + config; `rg -n "Dropbox|Gmail" dropbox_client.js gmail_client.js config.js`
 - `test/` — test suites and guidance; `rg -n "Running Tests" test/README.md`
 - `test/core/` — 80/20 contract suite; `rg -n "Core suite" test/README.md`
@@ -26,6 +29,7 @@
 - `content_script.js` — selection extraction flow (`AICODE-NOTE: NAV/CONTENT`)
 - `background.js` — EPUB build and image normalization (`AICODE-NOTE: NAV/BACKGROUND`)
 - `popup.js` — UI orchestration
+- `ui/events.js` — popup workflow handlers
 - `extractContent.js` — content script injection + messaging
 - `epub_generator.js` — EPUB building and templates
 - `dropbox_client.js` — Dropbox upload path

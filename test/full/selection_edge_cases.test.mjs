@@ -78,7 +78,13 @@ async function loadContentScript(dom) {
     const fs = await import('fs');
     const path = await import('path');
     const __dirname = path.dirname(new URL(import.meta.url).pathname);
+    const cleanupPath = path.join(__dirname, '../../content/cleanup.js');
+    const selectionPath = path.join(__dirname, '../../content/selection.js');
+    const imagesPath = path.join(__dirname, '../../content/images.js');
     const contentScriptPath = path.join(__dirname, '../../content_script.js');
+    const cleanupScript = fs.readFileSync(cleanupPath, 'utf8');
+    const selectionScript = fs.readFileSync(selectionPath, 'utf8');
+    const imagesScript = fs.readFileSync(imagesPath, 'utf8');
     const contentScript = fs.readFileSync(contentScriptPath, 'utf8');
     
     const testableScript = contentScript
@@ -87,11 +93,14 @@ async function loadContentScript(dom) {
         .replace(/\/\/@ts-check/, '')
         .replace(/\/\*\* @typedef.*?\*\//sg, '');
     
+    dom.window.eval(cleanupScript);
+    dom.window.eval(selectionScript);
+    dom.window.eval(imagesScript);
     dom.window.eval(testableScript);
     return dom.window;
 }
 
-test('extractPageContent handles null selection via clean fallback', async (t) => {
+test('extractPageContent rejects null selection', async (t) => {
     const errorMock = t.mock.method(console, 'error', () => {});
     const dom = createMockDOM('<p>Some content</p>');
     dom.window.getSelection = () => null;
@@ -99,13 +108,14 @@ test('extractPageContent handles null selection via clean fallback', async (t) =
     await loadContentScript(dom);
     installReadability(dom, { title: 'Clean Title', content: '<p>Fallback</p>' });
     
-    const result = await dom.window.extractPageContent();
-    assert.equal(result.title, 'Clean Title');
-    assert.ok(result.content.includes('Fallback'));
+    await assert.rejects(
+        () => dom.window.extractPageContent(),
+        /Сначала выделите текст на странице/
+    );
     errorMock.mock.restore();
 });
 
-test('extractPageContent handles selection with zero ranges via clean fallback', async (t) => {
+test('extractPageContent rejects selection with zero ranges', async (t) => {
     const errorMock = t.mock.method(console, 'error', () => {});
     const dom = createMockDOM('<p>Some content</p>');
     dom.window.getSelection = () => ({
@@ -117,13 +127,14 @@ test('extractPageContent handles selection with zero ranges via clean fallback',
     await loadContentScript(dom);
     installReadability(dom, { title: 'Clean Title', content: '<p>Fallback</p>' });
     
-    const result = await dom.window.extractPageContent();
-    assert.equal(result.title, 'Clean Title');
-    assert.ok(result.content.includes('Fallback'));
+    await assert.rejects(
+        () => dom.window.extractPageContent(),
+        /Сначала выделите текст на странице/
+    );
     errorMock.mock.restore();
 });
 
-test('extractPageContent handles whitespace-only selection via clean fallback', async (t) => {
+test('extractPageContent rejects whitespace-only selection', async (t) => {
     const errorMock = t.mock.method(console, 'error', () => {});
     const dom = createMockDOM('<p>Some content</p>');
     dom.window.getSelection = () => ({
@@ -139,9 +150,10 @@ test('extractPageContent handles whitespace-only selection via clean fallback', 
     await loadContentScript(dom);
     installReadability(dom, { title: 'Clean Title', content: '<p>Fallback</p>' });
     
-    const result = await dom.window.extractPageContent();
-    assert.equal(result.title, 'Clean Title');
-    assert.ok(result.content.includes('Fallback'));
+    await assert.rejects(
+        () => dom.window.extractPageContent(),
+        /Сначала выделите текст на странице/
+    );
     errorMock.mock.restore();
 });
 
@@ -276,7 +288,7 @@ test('processElement handles unsupported element types', async (t) => {
     assert.equal(result, '');
 });
 
-test('extractPageContent falls back to clean extraction when processed content is empty', async (t) => {
+test('extractPageContent rejects when selected content is empty after processing', async (t) => {
     const errorMock = t.mock.method(console, 'error', () => {});
     const dom = createMockDOM('<p>Test content</p>');
     dom.window.getSelection = () => ({
@@ -292,15 +304,16 @@ test('extractPageContent falls back to clean extraction when processed content i
     await loadContentScript(dom);
     installReadability(dom, { title: 'Clean Title', content: '<p>Fallback</p>' });
     
-    // Mock extractSelectedContent to return empty string
-    const originalExtractSelectedContent = dom.window.extractSelectedContent;
-    dom.window.extractSelectedContent = async () => '';
-    
-    const result = await dom.window.extractPageContent();
-    assert.equal(result.title, 'Clean Title');
-    assert.ok(result.content.includes('Fallback'));
-    
-    // Restore original function
-    dom.window.extractSelectedContent = originalExtractSelectedContent;
+    // Mock selection module to return empty content
+    const selectionApi = dom.window.EpubContentSelection || global.EpubContentSelection;
+    if (!selectionApi) {
+        throw new Error('EpubContentSelection module is unavailable in test context');
+    }
+    selectionApi.extractSelectedContent = async () => '';
+
+    await assert.rejects(
+        () => dom.window.extractPageContent(),
+        /не содержит экспортируемого контента/
+    );
     errorMock.mock.restore();
 });

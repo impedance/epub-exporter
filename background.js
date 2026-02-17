@@ -1,49 +1,48 @@
 // @ts-check
 /* global chrome */
-// Background script для обработки создания EPUB файлов
 import EPUBGenerator from './epub_generator.js';
-import { MAX_IMAGE_SIZE_FOR_OPTIMIZATION, MAX_IMAGE_WIDTH, JPEG_QUALITY } from './config.js';
 import DropboxClient from './dropbox_client.js';
+import GmailClient from './gmail_client.js';
+import { fetchImageAsDataURL, prepareImages, extractImageCandidatesFromHtml, optimizeImage } from './background/images.js';
 
 // AICODE-NOTE: NAV/BACKGROUND entry: chrome.runtime.onMessage -> createEPUBFile ref: background.js
-/** @typedef {import('./types').ExtractedImage} ExtractedImage */
-/** @typedef {import('./types').ExtractedContent} ExtractedContent */
-/** @type {Promise<any>|null} */
-let cachedConfigPromise = null;
-/** @type {Promise<any>|null} */
-let cachedGmailConfigPromise = null;
-/** @typedef {import('./types').ExtensionMessage} ExtensionMessage */
-/** @typedef {import('./types').CreateEPUBResponse} CreateEPUBResponse */
-/** @typedef {import('./types').FetchImageResponse} FetchImageResponse */
 // AICODE-LINK: ./types.d.ts#ExtractedImage
 // AICODE-LINK: ./types.d.ts#ExtractedContent
 // AICODE-LINK: ./types.d.ts#ExtensionMessage
 // AICODE-LINK: ./epub_generator.js#createEPUB
+// AICODE-LINK: ./background/images.js#prepareImages
 
-import GmailClient from './gmail_client.js';
+/** @typedef {import('./types').ExtractedContent} ExtractedContent */
+/** @typedef {import('./types').ExtensionMessage} ExtensionMessage */
+/** @typedef {import('./types').CreateEPUBResponse} CreateEPUBResponse */
+/** @typedef {import('./types').FetchImageResponse} FetchImageResponse */
 
 const dropboxClient = new DropboxClient();
 const gmailClient = new GmailClient();
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    const msg = /** @type {ExtensionMessage} */ (request);
+  const message = /** @type {ExtensionMessage} */ (request);
 
-    if (msg.action === 'createEPUB') {
-        createEPUBFile(msg.data, {
-            uploadToDropbox: Boolean(msg.uploadToDropbox),
-            sendToKindle: Boolean(msg.sendToKindle)
-        })
-            .then(result => sendResponse(/** @type {CreateEPUBResponse} */({ success: true, ...result })))
-            .catch(error => sendResponse(/** @type {CreateEPUBResponse} */({ success: false, error: error.message })));
-        return true; // Асинхронный ответ
-    }
+  if (message.action === 'createEPUB') {
+    createEPUBFile(message.data, {
+      uploadToDropbox: Boolean(message.uploadToDropbox),
+      sendToKindle: Boolean(message.sendToKindle)
+    })
+      .then((result) => sendResponse(/** @type {CreateEPUBResponse} */ ({ success: true, ...result })))
+      .catch((error) =>
+        sendResponse(/** @type {CreateEPUBResponse} */ ({ success: false, error: error.message }))
+      );
+    return true;
+  }
 
-    if (msg.action === 'fetchImageAsDataURL' && msg.url) {
-        fetchImageAsDataURL(msg.url)
-            .then(dataUrl => sendResponse(/** @type {FetchImageResponse} */({ success: true, dataUrl })))
-            .catch(error => sendResponse(/** @type {FetchImageResponse} */({ success: false, error: error.message })));
-        return true;
-    }
+  if (message.action === 'fetchImageAsDataURL' && message.url) {
+    fetchImageAsDataURL(message.url)
+      .then((dataUrl) => sendResponse(/** @type {FetchImageResponse} */ ({ success: true, dataUrl })))
+      .catch((error) =>
+        sendResponse(/** @type {FetchImageResponse} */ ({ success: false, error: error.message }))
+      );
+    return true;
+  }
 });
 
 /**
@@ -53,451 +52,45 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
  * @returns {Promise<{downloadUrl: string, filename: string, dropboxPath?: string, kindleSent?: boolean}>}
  */
 async function createEPUBFile(data, options = {}) {
-    try {
-        const generator = new EPUBGenerator();
-        const { title, content, images, url } = data;
-        const preparedImages = await prepareImages(images, url, content);
-        const result = await generator.createEPUB(title, content, preparedImages, url);
+  try {
+    const generator = new EPUBGenerator();
+    const { title, content, images, url } = data;
+    const preparedImages = await prepareImages(images, url, content);
+    const result = await generator.createEPUB(title, content, preparedImages, url);
 
-        let dropboxPath;
-        if (options.uploadToDropbox) {
-            const blobSize = typeof result.blob.size === 'number' ? result.blob.size : undefined;
-            console.log('[background][dropbox] upload requested', {
-                filename: result.filename,
-                bytes: blobSize ?? 'unknown'
-            });
-            dropboxPath = await dropboxClient.uploadFile(result.blob, result.filename);
-            console.log('[background][dropbox] upload completed', {
-                filename: result.filename,
-                dropboxPath
-            });
-        }
-
-        let kindleSent = false;
-        if (options.sendToKindle) {
-            console.log('[background][kindle] send requested', { filename: result.filename });
-            await gmailClient.sendEmail(result.blob, result.filename, '');
-            kindleSent = true;
-            console.log('[background][kindle] send completed');
-        }
-
-        return {
-            downloadUrl: result.downloadUrl,
-            filename: result.filename,
-            dropboxPath,
-            kindleSent
-        };
-    } catch (error) {
-        const err = /** @type {Error} */ (error);
-        console.error('Ошибка создания EPUB:', err);
-        throw err;
-    }
-}
-
-// AICODE-NOTE: DECISION/IMAGE-FETCH decision: background fetch bypasses canvas CORS to embed remote images.
-/**
- * Загружает изображение и возвращает data URL строку.
- * @param {string} url
- * @returns {Promise<string>}
- */
-async function fetchImageAsDataURL(url) {
-    const fetchResult = await tryFetchImageViaFetch(url);
-    if (fetchResult) {
-        return fetchResult;
-    }
-    return await fetchImageViaXHR(url);
-}
-
-// AICODE-NOTE: DECISION/IMAGE-NORMALIZE decision: parse HTML + normalize missing image blobs so EPUB packs remote assets when selection metadata is incomplete.
-/**
- * Ensures every image has an embeddable data URL, fetching in the background if needed.
- * @param {ExtractedImage[]} [images=[]]
- * @param {string} [pageUrl]
- * @param {string} [htmlContent]
- * @returns {Promise<ExtractedImage[]>}
- */
-async function prepareImages(images = [], pageUrl = '', htmlContent = '') {
-    if (!Array.isArray(images) || images.length === 0) {
-        images = [];
+    let dropboxPath;
+    if (options.uploadToDropbox) {
+      const blobSize = typeof result.blob.size === 'number' ? result.blob.size : undefined;
+      console.log('[background][dropbox] upload requested', {
+        filename: result.filename,
+        bytes: blobSize ?? 'unknown'
+      });
+      dropboxPath = await dropboxClient.uploadFile(result.blob, result.filename);
+      console.log('[background][dropbox] upload completed', {
+        filename: result.filename,
+        dropboxPath
+      });
     }
 
-    const prepared = [];
-    const seen = new Set();
-
-    const queue = [];
-    for (const image of images) {
-        if (!image) {
-            continue;
-        }
-        /** @type {any} */
-        const item = {
-            originalSrc: image.originalSrc || image.src || '',
-            resolvedSrc: image.src || '',
-            alt: image.alt || '',
-            width: image.width ?? 'auto',
-            height: image.height ?? 'auto',
-            base64: typeof image.base64 === 'string' ? image.base64 : ''
-        };
-        queue.push(item);
+    let kindleSent = false;
+    if (options.sendToKindle) {
+      console.log('[background][kindle] send requested', { filename: result.filename });
+      await gmailClient.sendEmail(result.blob, result.filename, '');
+      kindleSent = true;
+      console.log('[background][kindle] send completed');
     }
 
-    const htmlCandidates = extractImageCandidatesFromHtml(htmlContent, pageUrl);
-    for (const candidate of htmlCandidates) {
-        queue.push(candidate);
-    }
-
-    for (const candidate of queue) {
-        const key = makeImageKey(candidate.originalSrc, candidate.resolvedSrc, pageUrl);
-        if (!key || seen.has(key)) {
-            continue;
-        }
-
-        let base64Data = candidate.base64 && candidate.base64.startsWith('data:')
-            ? candidate.base64
-            : null;
-
-        if (!base64Data) {
-            /** @type {Set<string>} */
-            const fetchCandidates = new Set();
-            if (candidate.resolvedSrc) {
-                fetchCandidates.add(candidate.resolvedSrc);
-            }
-            if (candidate.originalSrc) {
-                fetchCandidates.add(candidate.originalSrc);
-            }
-
-            const tried = new Set();
-            for (const srcCandidate of fetchCandidates) {
-                const normalized = normalizeImageUrl(srcCandidate, pageUrl);
-                if (!normalized || tried.has(normalized)) {
-                    continue;
-                }
-                tried.add(normalized);
-
-                if (normalized.startsWith('data:')) {
-                    base64Data = normalized;
-                    break;
-                }
-
-                try {
-                    base64Data = await fetchImageAsDataURL(normalized);
-                    if (base64Data) {
-                        break;
-                    }
-                } catch (error) {
-                    console.warn('Не удалось загрузить изображение в фоне:', normalized, error);
-                }
-            }
-        }
-
-        if (!base64Data) {
-            continue;
-        }
-
-        // Оптимизация изображения (сжатие, ресайз, конвертация GIF)
-        try {
-            base64Data = await optimizeImage(base64Data);
-        } catch (error) {
-            console.warn('Ошибка оптимизации изображения:', error);
-        }
-
-        const normalizedSrc = normalizeImageUrl(candidate.resolvedSrc || candidate.originalSrc, pageUrl)
-            || candidate.resolvedSrc
-            || candidate.originalSrc;
-
-        if (!normalizedSrc) {
-            continue;
-        }
-
-        prepared.push({
-            src: normalizedSrc,
-            originalSrc: candidate.originalSrc || candidate.resolvedSrc || normalizedSrc,
-            base64: base64Data,
-            alt: candidate.alt || '',
-            width: candidate.width ?? 'auto',
-            height: candidate.height ?? 'auto'
-        });
-
-        seen.add(key);
-    }
-
-    return prepared;
-}
-
-/**
- * Resolves an arbitrary image reference to an absolute URL.
- * @param {string} candidate
- * @param {string} pageUrl
- * @returns {string|null}
- */
-function normalizeImageUrl(candidate, pageUrl) {
-    if (!candidate) {
-        return null;
-    }
-    if (candidate.startsWith('data:')) {
-        return candidate;
-    }
-    if (/^https?:\/\//i.test(candidate)) {
-        return candidate;
-    }
-    if (candidate.startsWith('//')) {
-        try {
-            const protocol = pageUrl ? new URL(pageUrl).protocol : 'https:';
-            return `${protocol}${candidate}`;
-        } catch (error) {
-            return `https:${candidate}`;
-        }
-    }
-    if (pageUrl) {
-        try {
-            return new URL(candidate, pageUrl).href;
-        } catch (error) {
-            return null;
-        }
-    }
-    return null;
-}
-
-/**
- * Creates a stable key for deduplicating image candidates.
- * @param {string} originalSrc
- * @param {string} resolvedSrc
- * @param {string} pageUrl
- * @returns {string}
- */
-function makeImageKey(originalSrc, resolvedSrc, pageUrl) {
-    const normalizedResolved = normalizeImageUrl(resolvedSrc, pageUrl);
-    if (normalizedResolved) {
-        return normalizedResolved;
-    }
-    const normalizedOriginal = normalizeImageUrl(originalSrc, pageUrl);
-    if (normalizedOriginal) {
-        return normalizedOriginal;
-    }
-    const fallback = resolvedSrc || originalSrc || '';
-    return fallback.trim().toLowerCase();
-}
-
-/**
- * Extracts <img> candidates from raw HTML content.
- * @param {string} html
- * @param {string} pageUrl
- * @returns {ExtractedImage[]}
- */
-function extractImageCandidatesFromHtml(html, pageUrl) {
-    if (typeof html !== 'string' || html.trim() === '') {
-        return [];
-    }
-
-    /** @type {ExtractedImage[]} */
-    const candidates = [];
-
-    if (typeof DOMParser !== 'undefined') {
-        try {
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(html, 'text/html');
-            const imgs = doc.querySelectorAll('img');
-            imgs.forEach(img => {
-                const srcAttr = img.getAttribute('src') || img.getAttribute('data-src') || '';
-                if (!srcAttr) {
-                    return;
-                }
-                const resolved = normalizeImageUrl(srcAttr, pageUrl) || srcAttr;
-                candidates.push({
-                    originalSrc: srcAttr,
-                    src: resolved,
-                    base64: '',
-                    alt: img.getAttribute('alt') || '',
-                    width: img.getAttribute('width') || 'auto',
-                    height: img.getAttribute('height') || 'auto'
-                });
-            });
-            if (candidates.length > 0) {
-                return candidates;
-            }
-        } catch (error) {
-            console.warn('DOMParser не смог разобрать HTML, используем резервный парсер:', error);
-        }
-    }
-
-    const regex = /<img\b[^>]*>/gi;
-    let match;
-    while ((match = regex.exec(html)) !== null) {
-        const tag = match[0];
-        const srcMatch = tag.match(/\s(?:src|data-src)=["']([^"']+)["']/i);
-        if (!srcMatch) {
-            continue;
-        }
-        const attr = tag.match(/src=["']([^"']*)["']/i)?.[1];
-        if (!attr) {
-            continue;
-        }
-        const resolved = normalizeImageUrl(attr, pageUrl) || attr;
-        const altMatch = tag.match(/\salt=["']([^"']*)["']/i);
-        const widthMatch = tag.match(/\swidth=["']([^"']*)["']/i);
-        const heightMatch = tag.match(/\sheight=["']([^"']*)["']/i);
-        if (resolved) {
-            candidates.push({
-                src: resolved,
-                originalSrc: attr,
-                base64: '',
-                alt: altMatch?.[1] ?? '',
-                width: widthMatch?.[1] ?? 'auto',
-                height: heightMatch?.[1] ?? 'auto'
-            });
-        }
-    }
-
-    return candidates;
-}
-
-// AICODE-TRAP: TRAP/FETCH-CDN CDN responses may block Fetch API despite host permissions; fall back to XHR in MV3 background [2025-10-22]
-/**
- * @param {string} url
- * @returns {Promise<string|null>}
- */
-async function tryFetchImageViaFetch(url) {
-    try {
-        const response = await fetch(url, { credentials: 'omit', redirect: 'follow' });
-        if (!response.ok) {
-            return null;
-        }
-
-        const contentType = response.headers.get('content-type') || 'image/jpeg';
-        if (!contentType.startsWith('image/')) {
-            return null;
-        }
-
-        const buffer = await response.arrayBuffer();
-        return `data:${contentType};base64,${arrayBufferToBase64(buffer)}`;
-    } catch (error) {
-        console.warn('Fetch API не смог загрузить изображение, пробуем XHR:', url, error);
-        return null;
-    }
-}
-
-/**
- * @param {string} url
- * @returns {Promise<string>}
- */
-function fetchImageViaXHR(url) {
-    return new Promise((resolve, reject) => {
-        try {
-            const xhr = new XMLHttpRequest();
-            xhr.open('GET', url, true);
-            xhr.responseType = 'arraybuffer';
-            xhr.onload = () => {
-                if (xhr.status && (xhr.status < 200 || xhr.status >= 300)) {
-                    reject(new Error(`XHR статус ${xhr.status}`));
-                    return;
-                }
-                const contentType = xhr.getResponseHeader('content-type') || 'image/jpeg';
-                if (!contentType.startsWith('image/')) {
-                    reject(new Error(`XHR получил неподдерживаемый тип ${contentType}`));
-                    return;
-                }
-                const buffer = xhr.response;
-                if (!(buffer instanceof ArrayBuffer)) {
-                    reject(new Error('XHR не вернул ArrayBuffer'));
-                    return;
-                }
-                resolve(`data:${contentType};base64,${arrayBufferToBase64(buffer)}`);
-            };
-            xhr.onerror = () => reject(new Error('XHR ошибка сети'));
-            xhr.ontimeout = () => reject(new Error('XHR таймаут'));
-            xhr.send();
-        } catch (error) {
-            reject(error instanceof Error ? error : new Error(String(error)));
-        }
-    });
-}
-
-/**
- * Конвертирует ArrayBuffer в base64.
- * @param {ArrayBuffer} buffer
- * @returns {string}
- */
-function arrayBufferToBase64(buffer) {
-    const bytes = new Uint8Array(buffer);
-    const chunkSize = 0x8000;
-    let binary = '';
-
-    for (let i = 0; i < bytes.length; i += chunkSize) {
-        const chunk = bytes.subarray(i, i + chunkSize);
-        let chunkString = '';
-        const chunkLen = chunk.length;
-        for (let j = 0; j < chunkLen; j++) {
-            const byte = chunk[j];
-            if (byte !== undefined) {
-                chunkString += String.fromCharCode(byte);
-            }
-        }
-        binary += chunkString;
-    }
-
-    return btoa(binary);
-}
-
-/**
- * Оптимизирует изображение: сжимает, меняет размер и конвертирует анимации в статику.
- * @param {string} dataUrl
- * @returns {Promise<string>}
- */
-async function optimizeImage(dataUrl) {
-    if (!dataUrl.startsWith('data:image/')) {
-        return dataUrl;
-    }
-
-    // Проверяем, нужно ли оптимизировать
-    const isGif = dataUrl.includes('image/gif');
-    const approxSize = Math.round((dataUrl.length * 3) / 4);
-    const isLarge = approxSize > MAX_IMAGE_SIZE_FOR_OPTIMIZATION;
-
-    if (!isGif && !isLarge) {
-        return dataUrl;
-    }
-
-    if (typeof OffscreenCanvas === 'undefined' || typeof createImageBitmap === 'undefined') {
-        console.warn('OffscreenCanvas не поддерживается, пропускаем оптимизацию');
-        return dataUrl;
-    }
-
-    try {
-        const blob = await (await fetch(dataUrl)).blob();
-        const imgBitmap = await createImageBitmap(blob);
-
-        let { width, height } = imgBitmap;
-
-        // Ресайз если слишком широкая
-        if (width > MAX_IMAGE_WIDTH) {
-            const ratio = MAX_IMAGE_WIDTH / width;
-            width = MAX_IMAGE_WIDTH;
-            height = Math.round(height * ratio);
-        }
-
-        const canvas = new OffscreenCanvas(width, height);
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return dataUrl;
-
-        ctx.drawImage(imgBitmap, 0, 0, width, height);
-
-        // Сохраняем как JPEG (даже если был GIF или PNG)
-        const optimizedBlob = await canvas.convertToBlob({
-            type: 'image/jpeg',
-            quality: Number(JPEG_QUALITY || 0.8)
-        });
-
-
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(/** @type {string} */(reader.result));
-            reader.onerror = reject;
-            reader.readAsDataURL(optimizedBlob);
-        });
-    } catch (error) {
-        console.error('Ошибка в optimizeImage:', error);
-        return dataUrl;
-    }
+    return {
+      downloadUrl: result.downloadUrl,
+      filename: result.filename,
+      dropboxPath,
+      kindleSent
+    };
+  } catch (error) {
+    const epubError = /** @type {Error} */ (error);
+    console.error('Ошибка создания EPUB:', epubError);
+    throw epubError;
+  }
 }
 
 export { prepareImages, extractImageCandidatesFromHtml, optimizeImage };

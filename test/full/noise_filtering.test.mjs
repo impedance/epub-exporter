@@ -6,7 +6,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const cleanupScriptPath = path.join(__dirname, '../../content/cleanup.js');
+const selectionScriptPath = path.join(__dirname, '../../content/selection.js');
+const imagesScriptPath = path.join(__dirname, '../../content/images.js');
 const contentScriptPath = path.join(__dirname, '../../content_script.js');
+const cleanupScript = fs.readFileSync(cleanupScriptPath, 'utf8');
+const selectionScript = fs.readFileSync(selectionScriptPath, 'utf8');
+const imagesScript = fs.readFileSync(imagesScriptPath, 'utf8');
 const contentScript = fs.readFileSync(contentScriptPath, 'utf8');
 
 // Mock DOM environment for content script testing
@@ -35,6 +41,9 @@ function loadContentScript(dom) {
         .replace(/\/\/@ts-check/, '')
         .replace(/\/\*\* @typedef.*?\*\//sg, '');
 
+    dom.window.eval(cleanupScript);
+    dom.window.eval(selectionScript);
+    dom.window.eval(imagesScript);
     dom.window.eval(testableScript);
     return dom.window;
 }

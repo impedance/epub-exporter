@@ -5,41 +5,109 @@
 /* AICODE-NOTE: DECISION/TYPE-JSDOC decision: JSDoc types formalize the content contract for reuse. */
 // AICODE-LINK: ./types.d.ts#ExtractedImage
 // AICODE-LINK: ./types.d.ts#ExtractedContent
+// AICODE-LINK: ./content/cleanup.js
+// AICODE-LINK: ./content/selection.js
+// AICODE-LINK: ./content/images.js
 
 /** @typedef {import('./types').ExtractedImage} ExtractedImage */
 /** @typedef {import('./types').ExtractedContent} ExtractedContent */
+/** @typedef {import('./types').ExtensionMessage} ExtensionMessage */
 
 /**
  * Селекторы элементов, которые не должны попадать в основной контент.
- * Включают навигацию, боковые панели, шапки, подвалы и рекламу.
  */
 const NOISE_SELECTORS = [
-    'nav', 'header', 'footer', 'aside',
-    '.nav', '.navigation', '.menu', '.sidebar',
-    '.ads', '.advertisement', '.social-share',
-    '.comments', '.related-posts', '.popup',
-    '.devsite-book-nav', '.devsite-book-nav-wrapper',
-    '.devsite-header', '.devsite-footer', '.devsite-top-section',
-    '.skip-link', '.button-wrapper',
-    '[class*="ad-"]', '[id*="ad-"]',
-    '#sidebar', '#navigation', '#header', '#footer'
+  'nav',
+  'header',
+  'footer',
+  'aside',
+  '.nav',
+  '.navigation',
+  '.menu',
+  '.sidebar',
+  '.ads',
+  '.advertisement',
+  '.social-share',
+  '.comments',
+  '.related-posts',
+  '.popup',
+  '.devsite-book-nav',
+  '.devsite-book-nav-wrapper',
+  '.devsite-header',
+  '.devsite-footer',
+  '.devsite-top-section',
+  '.skip-link',
+  '.button-wrapper',
+  '[class*="ad-"]',
+  '[id*="ad-"]',
+  '#sidebar',
+  '#navigation',
+  '#header',
+  '#footer'
 ];
+
+/**
+ * @returns {{
+ *   cleanText: (text: string) => string,
+ *   processList: (listElement: Element, tagName: string) => string,
+ *   getDirectTextContent: (element: Element) => string,
+ *   processElement: (element: Element) => string
+ * }}
+ */
+function getCleanupApi() {
+  const cleanup = /** @type {any} */ (globalThis).EpubContentCleanup;
+  if (!cleanup) {
+    throw new Error('EpubContentCleanup не загружен');
+  }
+  return cleanup;
+}
+
+/**
+ * @returns {{
+ *   hasMeaningfulSelection: (selection: Selection | null) => boolean,
+ *   extractSelectedContent: (selection: Selection, noiseSelectors: string[]) => Promise<string>,
+ *   isChildOfProcessedElement: (element: Element, processedElements: Set<Element>) => boolean,
+ *   extractTextContentFromElement: (container: Element, noiseSelectors: string[]) => Promise<string>
+ * }}
+ */
+function getSelectionApi() {
+  const selectionApi = /** @type {any} */ (globalThis).EpubContentSelection;
+  if (!selectionApi) {
+    throw new Error('EpubContentSelection не загружен');
+  }
+  return selectionApi;
+}
+
+/**
+ * @returns {{
+ *   extractImagesFromSelection: (selection: Selection) => Promise<ExtractedImage[]>,
+ *   extractImages: (container: Element) => Promise<ExtractedImage[]>
+ * }}
+ */
+function getImagesApi() {
+  const imagesApi = /** @type {any} */ (globalThis).EpubContentImages;
+  if (!imagesApi) {
+    throw new Error('EpubContentImages не загружен');
+  }
+  return imagesApi;
+}
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    const msg = /** @type {ExtensionMessage} */ (request);
+  const msg = /** @type {ExtensionMessage} */ (request);
 
-    if (msg.action === 'extractContent') {
-        extractPageContent()
-            .then(data => sendResponse({ success: true, data }))
-            .catch(error => sendResponse({ success: false, error: error.message }));
-        return true; // Асинхронный ответ
-    }
+  if (msg.action === 'extractContent') {
+    extractPageContent()
+      .then((data) => sendResponse({ success: true, data }))
+      .catch((error) => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
 
-    if (msg.action === 'extractCleanContent') {
-        extractCleanPageContent()
-            .then(data => sendResponse({ success: true, data }))
-            .catch(error => sendResponse({ success: false, error: error.message }));
-        return true;
-    }
+  if (msg.action === 'extractCleanContent') {
+    extractCleanPageContent()
+      .then((data) => sendResponse({ success: true, data }))
+      .catch((error) => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
 });
 
 /**
@@ -47,54 +115,45 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
  * @returns {Promise<ExtractedContent>}
  */
 async function extractCleanPageContent() {
-    try {
-        // @ts-ignore - Readability подгружается в контент скрипт
-        if (typeof Readability === 'undefined') {
-            throw new Error('Модуль очистки контента не загружен');
-        }
-
-        // Клонируем документ, так как Readability модифицирует его
-        const documentClone = /** @type {Document} */ (document.cloneNode(true));
-
-        // Предварительная очистка от шума перед Readability
-        NOISE_SELECTORS.forEach(selector => {
-            const elements = documentClone.querySelectorAll(selector);
-            elements.forEach(el => el.remove());
-        });
-
-        // @ts-ignore
-        const reader = new Readability(documentClone);
-        const article = reader.parse();
-
-        if (!article || !article.content) {
-            throw new Error('Не удалось извлечь основной контент страницы');
-        }
-
-        // Очищаем HTML от потенциально опасных тегов и атрибутов
-        // @ts-ignore - DOMPurify подгружается в контент скрипт
-        const cleanContent = typeof DOMPurify !== 'undefined'
-            ? DOMPurify.sanitize(article.content)
-            : article.content;
-
-        // Извлекаем изображения из оригинального документа (Readability может их потерять или изменить пути)
-        // Но для превью нам достаточно HTML. Для EPUB лучше использовать селекцию.
-        // Тем не менее, попытаемся найти изображения в "чистом" контенте
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = cleanContent;
-        const images = await extractImages(tempDiv);
-
-        return {
-            title: article.title || extractTitle(),
-            content: cleanContent,
-            images,
-            url: window.location.href,
-            timestamp: new Date().toISOString()
-        };
-    } catch (error) {
-        const err = /** @type {Error} */ (error);
-        console.error('Ошибка "чистого" извлечения:', err);
-        throw err;
+  const { extractImages } = getImagesApi();
+  try {
+    // @ts-ignore - Readability подгружается в контент скрипт
+    if (typeof Readability === 'undefined') {
+      throw new Error('Модуль очистки контента не загружен');
     }
+
+    const documentClone = /** @type {Document} */ (document.cloneNode(true));
+    NOISE_SELECTORS.forEach((selector) => {
+      documentClone.querySelectorAll(selector).forEach((element) => element.remove());
+    });
+
+    // @ts-ignore
+    const reader = new Readability(documentClone);
+    const article = reader.parse();
+
+    if (!article || !article.content) {
+      throw new Error('Не удалось извлечь основной контент страницы');
+    }
+
+    // @ts-ignore - DOMPurify подгружается в контент скрипт
+    const cleanContent = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(article.content) : article.content;
+
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = cleanContent;
+    const images = await extractImages(tempDiv);
+
+    return {
+      title: article.title || extractTitle(),
+      content: cleanContent,
+      images,
+      url: window.location.href,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    const cleanError = /** @type {Error} */ (error);
+    console.error('Ошибка "чистого" извлечения:', cleanError);
+    throw cleanError;
+  }
 }
 
 /**
@@ -102,43 +161,36 @@ async function extractCleanPageContent() {
  * @returns {Promise<ExtractedContent>}
  */
 async function extractPageContent() {
-    try {
-        // Получаем выделенный текст
-        const selection = window.getSelection();
-
-        // Если ничего не выделено - используем "чистое" извлечение (Readability)
-        if (!selection || selection.rangeCount === 0 || selection.toString().trim() === '') {
-            console.log('[content] No selection found, falling back to clean extraction');
-            return await extractCleanPageContent();
-        }
-
-        // Извлекаем заголовок
-        let title = extractTitle();
-
-        // Извлекаем выделенный контент
-        const content = await extractSelectedContent(selection);
-
-        // Извлекаем изображения из выделенного содержимого
-        const images = await extractImagesFromSelection(selection);
-
-        if (!content.trim()) {
-            console.log('[content] Selected content is empty, falling back to clean extraction');
-            return await extractCleanPageContent();
-        }
-
-        return {
-            title,
-            content,
-            images,
-            url: window.location.href,
-            timestamp: new Date().toISOString()
-        };
-
-    } catch (error) {
-        const err = /** @type {Error} */ (error);
-        console.error('Ошибка извлечения контента:', err);
-        throw err;
+  const selectionApi = getSelectionApi();
+  const { extractImagesFromSelection } = getImagesApi();
+  try {
+    // AICODE-CONTRACT: CONTRACT/SELECTION export requires explicit user selection (no auto-extract) [2026-02-10]
+    const selection = window.getSelection();
+    if (!selectionApi.hasMeaningfulSelection(selection)) {
+      throw new Error('Сначала выделите текст на странице, затем запустите экспорт.');
     }
+    const nonEmptySelection = /** @type {Selection} */ (selection);
+
+    const title = extractTitle();
+    const content = await selectionApi.extractSelectedContent(nonEmptySelection, NOISE_SELECTORS);
+    const images = await extractImagesFromSelection(nonEmptySelection);
+
+    if (!content.trim()) {
+      throw new Error('Выделенный фрагмент не содержит экспортируемого контента.');
+    }
+
+    return {
+      title,
+      content,
+      images,
+      url: window.location.href,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    const extractError = /** @type {Error} */ (error);
+    console.error('Ошибка извлечения контента:', extractError);
+    throw extractError;
+  }
 }
 
 /**
@@ -146,550 +198,133 @@ async function extractPageContent() {
  * @returns {string}
  */
 function extractTitle() {
-    // Пытаемся найти заголовок в разных местах
-    const titleSelectors = [
-        'h1',
-        '.step-dynamic-container h1',
-        '.step-dynamic-container h2',
-        '.title',
-        '.page-title',
-        'title'
-    ];
+  const { cleanText } = getCleanupApi();
+  const titleSelectors = ['h1', '.step-dynamic-container h1', '.step-dynamic-container h2', '.title', '.page-title', 'title'];
 
-    for (const selector of titleSelectors) {
-        const element = document.querySelector(selector);
-        if (element) {
-            // Apply cleanText FIRST to handle NBSP-only titles
-            const cleaned = cleanText(element.textContent || '');
-            if (cleaned) {
-                return cleaned;
-            }
-        }
+  for (const selector of titleSelectors) {
+    const element = document.querySelector(selector);
+    if (!element) {
+      continue;
     }
+    const cleaned = cleanText(element.textContent || '');
+    if (cleaned) {
+      return cleaned;
+    }
+  }
 
-    // Если заголовок не найден, используем title страницы
-    return document.title || 'Экспортированная статья';
+  return document.title || 'Экспортированная статья';
 }
 
 /**
- * Извлекает выделенное содержимое.
  * @param {Selection} selection
  * @returns {Promise<string>}
  */
 async function extractSelectedContent(selection) {
-    try {
-        // Создаем временный контейнер для работы с выделенным содержимым
-        const tempDiv = document.createElement('div');
-
-        // Копируем все выделенные range в временный контейнер
-        for (let i = 0; i < selection.rangeCount; i++) {
-            const range = selection.getRangeAt(i);
-            const contents = range.cloneContents();
-            tempDiv.appendChild(contents);
-        }
-
-        // Обрабатываем содержимое так же, как и контейнерное содержимое
-        return await extractTextContentFromElement(tempDiv);
-    } catch (error) {
-        // Если не удается извлечь HTML структуру, используем простой текст
-        const selectedText = selection.toString().trim();
-        if (selectedText) {
-            // Разбиваем на абзацы по двойным переносам строк
-            const paragraphs = selectedText.split(/\n\s*\n/).filter(p => p.trim());
-            if (paragraphs.length > 1) {
-                return paragraphs.map(p => `<p>${cleanText(p.trim())}</p>`).join('\n');
-            } else {
-                // Если это один блок текста, просто оборачиваем в параграф
-                return `<p>${cleanText(selectedText)}</p>`;
-            }
-        }
-        return '';
-    }
+  const selectionApi = getSelectionApi();
+  return await selectionApi.extractSelectedContent(selection, NOISE_SELECTORS);
 }
 
 /**
- * Извлекает изображения из выделенного содержимого.
  * @param {Selection} selection
  * @returns {Promise<ExtractedImage[]>}
  */
 async function extractImagesFromSelection(selection) {
-    const images = [];
-
-    try {
-        // Создаем временный контейнер для поиска изображений
-        const tempDiv = document.createElement('div');
-
-        for (let i = 0; i < selection.rangeCount; i++) {
-            const range = selection.getRangeAt(i);
-            const contents = range.cloneContents();
-            tempDiv.appendChild(contents);
-        }
-
-        // Используем существующую функцию для извлечения изображений
-        return await extractImages(tempDiv);
-    } catch (error) {
-        console.warn('Ошибка извлечения изображений из выделения:', error);
-        return [];
-    }
+  const { extractImagesFromSelection: extractSelectionImages } = getImagesApi();
+  return await extractSelectionImages(selection);
 }
 
 /**
- * Извлекает текстовое содержимое из элемента.
  * @param {Element} container
  * @returns {Promise<string>}
  */
 async function extractTextContentFromElement(container) {
-    // Клонируем контейнер для безопасной обработки
-    const clone = /** @type {HTMLElement} */ (container.cloneNode(true));
-
-    // Удаляем нежелательные элементы
-    NOISE_SELECTORS.forEach(selector => {
-        const elements = clone.querySelectorAll(selector);
-        elements.forEach(el => el.remove());
-    });
-
-    // Извлекаем контент с сохранением структуры
-    let formattedContent = '';
-    const processedElements = new Set(); // Отслеживаем обработанные элементы
-
-    // Обрабатываем элементы в порядке появления в документе
-    // AICODE-NOTE: DECISION/INCLUDE-IMAGES decision: include images to preserve visual context in EPUB.
-    const walker = document.createTreeWalker(
-        clone,
-        NodeFilter.SHOW_ELEMENT,
-        {
-            acceptNode: function (node) {
-                const element = /** @type {Element} */ (node);
-                const tagName = element.tagName.toLowerCase();
-                if (['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'blockquote', 'pre', 'code', 'div', 'img', 'span'].includes(tagName)) {
-                    return NodeFilter.FILTER_ACCEPT;
-                }
-                return NodeFilter.FILTER_SKIP;
-            }
-        }
-    );
-
-    let node;
-    while (node = walker.nextNode()) {
-        const element = /** @type {Element} */ (node);
-        if (processedElements.has(element) || isChildOfProcessedElement(element, processedElements)) {
-            continue;
-        }
-
-        const content = processElement(element);
-        if (content.trim()) {
-            formattedContent += content + '\n';
-            processedElements.add(element);
-        }
-    }
-
-    // Если структурированный контент найден, возвращаем его
-    if (formattedContent.trim()) {
-        return formattedContent;
-    }
-
-    // Если структурированный контент не найден, извлекаем весь текст
-    const allText = cleanText(clone.textContent);
-    if (allText) {
-        // Разбиваем на абзацы по двойным переносам строк
-        const paragraphs = allText.split(/\n\s*\n/).filter(p => p.trim());
-        return paragraphs.map(p => `<p>${p.trim()}</p>`).join('\n');
-    }
-
-    return '';
+  const selectionApi = getSelectionApi();
+  return await selectionApi.extractTextContentFromElement(container, NOISE_SELECTORS);
 }
 
 /**
- * Проверяет, является ли элемент потомком уже обработанного элемента
- * @param {Element} element
- * @param {Set<Element>} processedElements
- * @returns {boolean}
+ * @param {string} text
+ * @returns {string}
  */
-function isChildOfProcessedElement(element, processedElements) {
-    let parent = element.parentElement;
-    while (parent) {
-        if (processedElements.has(parent)) {
-            return true;
-        }
-        parent = parent.parentElement;
-    }
-    return false;
+function cleanText(text) {
+  const cleanup = getCleanupApi();
+  return cleanup.cleanText(text);
 }
 
 /**
- * Обрабатывает отдельный элемент и возвращает его HTML представление
  * @param {Element} element
  * @returns {string}
  */
-function processElement(element) {
-    const tagName = element.tagName.toLowerCase();
-
-    switch (tagName) {
-        case 'h1':
-        case 'h2':
-        case 'h3':
-        case 'h4':
-        case 'h5':
-        case 'h6':
-            const headerText = cleanText(element.textContent);
-            return headerText ? `<${tagName}>${headerText}</${tagName}>` : '';
-
-        case 'p':
-            const pText = cleanText(element.textContent);
-            return pText ? `<p>${pText}</p>` : '';
-
-        case 'blockquote':
-            const quoteText = cleanText(element.textContent);
-            return quoteText ? `<blockquote>${quoteText}</blockquote>` : '';
-
-        case 'pre':
-            // Проверяем, есть ли внутри code элемент с data-highlighted
-            const codeElement = element.querySelector('code[data-highlighted="yes"]');
-            if (codeElement) {
-                // Сохраняем оригинальное форматирование для подсвеченного кода
-                const codeContent = codeElement.innerHTML;
-                return `<pre><code>${codeContent}</code></pre>`;
-            } else {
-                const preText = cleanText(element.textContent);
-                return preText ? `<pre><code>${preText}</code></pre>` : '';
-            }
-
-        case 'code':
-            // Обрабатываем отдельные элементы code с подсветкой синтаксиса
-            if (element.getAttribute('data-highlighted') === 'yes') {
-                const codeContent = element.innerHTML;
-                return `<code>${codeContent}</code>`;
-            } else {
-                const codeText = cleanText(element.textContent);
-                return codeText ? `<code>${codeText}</code>` : '';
-            }
-
-        case 'ul':
-        case 'ol':
-            return processList(element, tagName);
-
-        case 'img': {
-            const img = /** @type {HTMLImageElement} */ (element);
-            const src = img.getAttribute('src') || img.getAttribute('data-src');
-            if (!src) return '';
-            const alt = cleanText(img.getAttribute('alt') || '');
-            const width = img.getAttribute('width') || img.width;
-            const height = img.getAttribute('height') || img.height;
-            // AICODE-TRAP: TRAP/IMG-ORIGINAL-SRC preserve original src so EPUB generator can map to downloaded file [2025-08-14]
-            return `<img src="${src}" alt="${alt}"${width ? ` width="${width}` : ''}${width ? '"' : ''}${height ? ` height="${height}` : ''}${height ? '"' : ''}/>`;
-        }
-
-        case 'span': {
-            // AICODE-NOTE: DECISION/BUBBLE-SPANS decision: Bubble HTML wraps paragraphs in span nodes; treat them as block-level text.
-            const spanText = cleanText(element.textContent);
-            return spanText ? `<p>${spanText}</p>` : '';
-        }
-
-        case 'div':
-            // Обрабатываем div только если он содержит прямой текстовый контент
-            const directText = getDirectTextContent(element);
-            if (directText && directText.trim()) {
-                return `<p>${cleanText(directText)}</p>`;
-            }
-            return '';
-
-        default:
-            return '';
-    }
+function getDirectTextContent(element) {
+  const cleanup = getCleanupApi();
+  return cleanup.getDirectTextContent(element);
 }
 
 /**
- * Обрабатывает списки (ul/ol) с сохранением структуры
  * @param {Element} listElement
  * @param {string} tagName
  * @returns {string}
  */
 function processList(listElement, tagName) {
-    const listItems = listElement.querySelectorAll(':scope > li');
-    if (listItems.length === 0) {
-        return '';
-    }
-
-    let listContent = '';
-    listItems.forEach(li => {
-        const liText = cleanText(li.textContent);
-        if (liText) {
-            listContent += `    <li>${liText}</li>\n`;
-        }
-    });
-
-    if (listContent) {
-        return `<${tagName}>\n${listContent}</${tagName}>`;
-    }
-
-    return '';
+  const cleanup = getCleanupApi();
+  return cleanup.processList(listElement, tagName);
 }
 
 /**
- * Получает прямой текстовый контент элемента (без вложенных элементов)
  * @param {Element} element
  * @returns {string}
  */
-function getDirectTextContent(element) {
-    let text = '';
-    for (let node of element.childNodes) {
-        if (node.nodeType === Node.TEXT_NODE) {
-            text += node.textContent;
-        }
-    }
-    return text;
+function processElement(element) {
+  const cleanup = getCleanupApi();
+  return cleanup.processElement(element);
 }
 
 /**
- * Собирает изображения из контейнера.
+ * @param {Element} element
+ * @param {Set<Element>} processedElements
+ * @returns {boolean}
+ */
+function isChildOfProcessedElement(element, processedElements) {
+  const selectionApi = getSelectionApi();
+  return selectionApi.isChildOfProcessedElement(element, processedElements);
+}
+
+/**
  * @param {Element} container
  * @returns {Promise<ExtractedImage[]>}
  */
 async function extractImages(container) {
-    const images = [];
-    const imgElements = container.querySelectorAll('img');
-
-    for (let img of imgElements) {
-        try {
-            // AICODE-TRAP: TRAP/JSDOM-IMG-DIMS jsdom clones report zero width/height; prefer natural dimensions or attributes to avoid dropping real images [2025-08-14]
-            const attrWidth = parseInt(img.getAttribute('width') || '', 10);
-            const attrHeight = parseInt(img.getAttribute('height') || '', 10);
-            const effectiveWidth = img.naturalWidth || (!Number.isNaN(attrWidth) ? attrWidth : img.width);
-            const effectiveHeight = img.naturalHeight || (!Number.isNaN(attrHeight) ? attrHeight : img.height);
-
-            // Пропускаем иконки только если известные размеры слишком малы
-            if (effectiveWidth && effectiveHeight && (effectiveWidth < 50 || effectiveHeight < 50)) {
-                continue;
-            }
-
-            const rawSrc = img.getAttribute('src') || img.getAttribute('data-src');
-            const src = img.src || rawSrc;
-            if (!src || !rawSrc) continue;
-
-            // Конвертируем в base64
-            const base64 = await imageToBase64(rawSrc, src);
-            if (base64) {
-                images.push({
-                    src: src,
-                    originalSrc: rawSrc,
-                    base64: base64,
-                    alt: img.alt || '',
-                    width: effectiveWidth || 'auto',
-                    height: effectiveHeight || 'auto'
-                });
-            }
-        } catch (error) {
-            const err = /** @type {Error} */ (error);
-            console.warn('Ошибка обработки изображения:', err);
-        }
-    }
-
-    return images;
-}
-
-// AICODE-TRAP: TRAP/CORS-CANVAS CDN images without CORS taint canvas; use fetch fallback first [2025-10-21]
-/**
- * Конвертирует изображение в base64 с учетом CORS ограничений.
- * @param {string} rawSrc
- * @param {string} resolvedSrc
- * @returns {Promise<string|null>}
- */
-async function imageToBase64(rawSrc, resolvedSrc) {
-    if (!rawSrc && !resolvedSrc) {
-        return null;
-    }
-
-    if ((rawSrc && rawSrc.startsWith('data:')) || (resolvedSrc && resolvedSrc.startsWith('data:'))) {
-        return resolvedSrc || rawSrc;
-    }
-
-    const candidates = new Set();
-    if (resolvedSrc) {
-        candidates.add(resolvedSrc);
-    }
-
-    if (rawSrc && rawSrc !== resolvedSrc) {
-        try {
-            candidates.add(new URL(rawSrc, window.location.href).href);
-        } catch (error) {
-            // Игнорируем некорректные URI
-        }
-    }
-
-    for (const candidate of candidates) {
-        const dataUrl = await fetchImageWithFallback(candidate);
-        if (dataUrl) {
-            return dataUrl;
-        }
-    }
-
-    return await convertImageWithCanvas(resolvedSrc || rawSrc);
+  const imagesApi = getImagesApi();
+  return await imagesApi.extractImages(container);
 }
 
 /**
- * Пытается загрузить изображение напрямую, затем через background fallback.
- * @param {string} url
- * @returns {Promise<string|null>}
- */
-async function fetchImageWithFallback(url) {
-    if (!url) {
-        return null;
-    }
-
-    const directResult = await fetchImageDirect(url);
-    if (directResult) {
-        return directResult;
-    }
-
-    if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
-        try {
-            const response = await chrome.runtime.sendMessage({
-                action: 'fetchImageAsDataURL',
-                url
-            });
-            if (response?.success && response.dataUrl) {
-                return response.dataUrl;
-            }
-        } catch (error) {
-            const err = /** @type {Error} */ (error);
-            console.warn('Background fetch failed:', err.message);
-        }
-    }
-
-    return null;
-}
-
-/**
- * Получает изображение через fetch внутри content script.
- * @param {string} url
- * @returns {Promise<string|null>}
- */
-async function fetchImageDirect(url) {
-    try {
-        const response = await fetch(url, {
-            mode: 'cors',
-            credentials: 'omit',
-            cache: 'force-cache'
-        });
-
-        if (!response.ok) {
-            return null;
-        }
-
-        const blob = await response.blob();
-        if (!blob.type.startsWith('image/')) {
-            return null;
-        }
-
-        const dataUrl = await blobToDataURL(blob);
-        return dataUrl || null;
-    } catch (error) {
-        return null;
-    }
-}
-
-/**
- * Конвертирует Blob в data URL.
- * @param {Blob} blob
- * @returns {Promise<string>}
- */
-function blobToDataURL(blob) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(typeof reader.result === 'string' ? reader.result : '');
-        reader.onerror = () => reject(reader.error);
-        reader.readAsDataURL(blob);
-    });
-}
-
-/**
- * Последняя попытка: конвертируем изображение через canvas.
- * @param {string} url
- * @returns {Promise<string|null>}
- */
-function convertImageWithCanvas(url) {
-    if (!url) {
-        return Promise.resolve(null);
-    }
-
-    return new Promise((resolve) => {
-        try {
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
-
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                canvas.width = img.naturalWidth;
-                canvas.height = img.naturalHeight;
-                if (!ctx) {
-                    resolve(null);
-                    return;
-                }
-                ctx.drawImage(img, 0, 0);
-
-                try {
-                    const dataURL = canvas.toDataURL('image/jpeg', 0.8);
-                    resolve(dataURL);
-                } catch (error) {
-                    const err = /** @type {Error} */ (error);
-                    console.warn('Ошибка конвертации в base64:', err);
-                    resolve(null);
-                }
-            };
-
-            img.onerror = () => {
-                resolve(null);
-            };
-
-            img.src = url;
-        } catch (error) {
-            resolve(null);
-        }
-    });
-}
-
-/**
- * Очищает текст от лишних символов.
- * @param {string} text
- * @returns {string}
- */
-function cleanText(text) {
-    return text
-        .replace(/\s+/g, ' ')
-        .replace(/[\u00A0\u2000-\u200B\u2028\u2029]/g, ' ')
-        .trim();
-}
-
-// Вспомогательная функция для отладки
-/**
- * Вспомогательная функция для отладки
- * @returns {void}
+ * Вспомогательная функция для отладки.
  */
 function debugExtraction() {
-    const selection = window.getSelection();
-    if (selection && selection.rangeCount > 0 && selection.toString().trim()) {
-        console.log('Найдено выделение:', selection.toString().substring(0, 500) + '...');
-        console.log('Количество диапазонов:', selection.rangeCount);
-    } else {
-        console.log('Нет выделенного текста');
-        console.log('Пожалуйста, выделите текст на странице');
-    }
+  const selection = window.getSelection();
+  const selectionApi = getSelectionApi();
+  if (selectionApi.hasMeaningfulSelection(selection)) {
+    console.log('Найдено выделение:', selection?.toString().substring(0, 500) + '...');
+    console.log('Количество диапазонов:', selection?.rangeCount || 0);
+  } else {
+    console.log('Нет выделенного текста');
+    console.log('Пожалуйста, выделите текст на странице');
+  }
 }
 
-// Экспорт функций для тестирования
 if (typeof window !== 'undefined') {
-    window.extractPageContent = extractPageContent;
-    window.extractSelectedContent = extractSelectedContent;
-    window.extractTitle = extractTitle;
-    window.cleanText = cleanText;
-    window.extractImagesFromSelection = extractImagesFromSelection;
-    window.extractImages = extractImages;
-    window.processList = processList;
-    window.getDirectTextContent = getDirectTextContent;
-    window.isChildOfProcessedElement = isChildOfProcessedElement;
-    window.processElement = processElement;
-    window.extractCleanPageContent = extractCleanPageContent;
-    window.extractTextContentFromElement = extractTextContentFromElement;
-    window.debugExtraction = debugExtraction;
+  window.extractPageContent = extractPageContent;
+  window.extractSelectedContent = extractSelectedContent;
+  window.extractTitle = extractTitle;
+  window.cleanText = cleanText;
+  window.extractImagesFromSelection = extractImagesFromSelection;
+  window.extractImages = extractImages;
+  window.processList = processList;
+  window.getDirectTextContent = getDirectTextContent;
+  window.isChildOfProcessedElement = isChildOfProcessedElement;
+  window.processElement = processElement;
+  window.extractCleanPageContent = extractCleanPageContent;
+  window.extractTextContentFromElement = extractTextContentFromElement;
+  window.debugExtraction = debugExtraction;
 }

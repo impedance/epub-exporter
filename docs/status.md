@@ -5,6 +5,9 @@
 
 ## Current Focus
 - PocketBook compatibility refactor complete (t1-t9): sanitizer module, chapter splitting, repair CLI, contract-ready pipeline.
+- Canonical refactor execution plan is consolidated in `docs/implementation-plan-refactor.md`.
+- Refactor backlog in progress: popup split into `ui/*`, background image prep moved to `background/images.js`, content extraction split into `content/*`.
+- Export contract is now strict selection-only; no-selection path is preview-only (`extractCleanContent`).
 - Monitor large selections and image-heavy exports for performance regressions.
 - Keep selection-based workflow documentation aligned with the actual implementation.
 - Core 80/20 test suite now lives in `test/core/`; full regression suite moved to `test/full/`.
