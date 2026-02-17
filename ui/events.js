@@ -132,8 +132,18 @@ export function createPopupHandlers(deps) {
       view.renderWorkflowStage('extract', { dropbox: shouldUploadToDropbox, kindle: shouldSendToKindle });
       view.setProgress(20, controls);
 
-      const response = await extractContentFromTab(tab.id);
+      let response = await extractContentFromTab(tab.id);
       debugLog('Content extraction response', response);
+
+      // AICODE-NOTE: EXTRACTION-FALLBACK If no selection, fallback to Readability "clean" extraction
+      if (!response || !response.success) {
+        if (response?.error && (response.error.includes('выделите текст') || response.error.includes('не содержит'))) {
+          debugLog('No selection found, falling back to clean extraction');
+          view.setStatus('⌛ Текст не выделен, извлекаю всю страницу...', 'info');
+          response = await extractCleanContentFromTab(tab.id);
+        }
+      }
+
       if (!response || !response.success) {
         throw new Error(response?.error || 'Не удалось извлечь контент');
       }

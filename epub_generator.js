@@ -151,12 +151,13 @@ class EPUBGenerator {
      * @returns {Promise<JSZipConstructor>}
      */
     async loadJSZip() {
-        // AICODE-TRAP: TRAP/JSZIP-INIT JSZip is loaded via import, but might not be ready instantly in MV3. [2025-08-12]
-        // AICODE-NOTE: DECISION/JSZIP-IMPORT decision: module import loads JSZip; this function validates availability.
-        // @ts-ignore
-        if (typeof JSZip !== 'undefined') {
-            // @ts-ignore
-            const JSZipRef = JSZip;
+        // AICODE-TRAP: TRAP/JSZIP-INIT JSZip is loaded via import as a side-effect, but we need to access it from the global scope.
+        // In Service Worker modules, we must explicitly use `self` or `globalThis`.
+        const JSZipRef = (typeof globalThis !== 'undefined' ? globalThis.JSZip : undefined) ||
+            (typeof self !== 'undefined' ? self.JSZip : undefined) ||
+            (typeof window !== 'undefined' ? window.JSZip : undefined);
+
+        if (JSZipRef) {
             // Проверяем целостность уже загруженной библиотеки
             if (!this.validateJSZipIntegrity(JSZipRef)) {
                 throw new Error('Нарушена целостность уже загруженной библиотеки JSZip');
